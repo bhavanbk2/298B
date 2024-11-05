@@ -18,9 +18,20 @@ gpt_client = ChatOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo")
 # Path to your local LLaMA model files
 llama_model_path = r"C:\Users\Checkout\Downloads\llama3_2_3b"  # Change this to your local model directory
 
+# Check if the model path exists and contains necessary files
+def check_model_files(model_path):
+    required_files = ['pytorch_model.bin', 'config.json', 'tokenizer_config.json', 'vocab.txt']
+    missing_files = [file for file in required_files if not os.path.exists(os.path.join(model_path, file))]
+    
+    if missing_files:
+        raise ValueError(f"Missing required files in the model directory: {', '.join(missing_files)}")
+    else:
+        print(f"All required model files are present in: {model_path}")
+
 # Load the LLaMA model and tokenizer
 @st.cache_resource
 def load_llama_model():
+    check_model_files(llama_model_path)  # Ensure the required files exist
     model = LlamaForCausalLM.from_pretrained(llama_model_path, local_files_only=True)
     tokenizer = LlamaTokenizer.from_pretrained(llama_model_path, local_files_only=True)
     return model, tokenizer
