@@ -6,7 +6,7 @@ import time
 import json
 
 # Load LLaMA model and tokenizer from the local path
-llama_model_dir = r'C:\Users\Checkout\Downloads\llama3_2_3b'  # Use raw string for Windows paths
+llama_model_dir = r'C:\Users\Checkout\Downloads\llama3_2_3b' # Use raw string for Windows paths
 
 # Load the LLaMA model and tokenizer
 llama_model = LlamaForCausalLM.from_pretrained(llama_model_dir)
