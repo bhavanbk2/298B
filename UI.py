@@ -239,11 +239,8 @@ st.markdown("""
 col1, col2 = st.columns([4, 1])
 
 with col1:
-    # Single input box with a fun placeholder
-    user_query = st.text_input("", placeholder="💡 What’s on your mind?", key="user_input", label_visibility="collapsed")
-
+    user_query = st.text_input("", label_visibility="collapsed")  # Hidden label
 with col2:
-    # Submit button
     submit_button = st.button("Send")
 
 # Handle input and generate bot response
@@ -263,4 +260,6 @@ if submit_button and user_query:
                 chat_container.markdown(f'<div class="chat-bubble chat-bubble-bot"><img class="avatar" src="data:image/png;base64,{bot_avatar_base64}"> {message["bot"]}</div>', unsafe_allow_html=True)
         
         chat_container.markdown('</div>', unsafe_allow_html=True)
-        st.experimental_rerun()  # Rerun to update chat display
+
+    # Rerun to update chat display
+    st.rerun()
