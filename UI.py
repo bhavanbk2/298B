@@ -10,6 +10,9 @@ import json
 import time
 import base64
 
+# Set the page configuration first to prevent errors
+st.set_page_config(page_title="Conversational Bot", layout="wide")
+
 # Load environment variables
 load_dotenv()
 
@@ -83,8 +86,6 @@ def load_image(image_path):
     return None
 
 # Streamlit UI setup
-st.set_page_config(page_title="Conversational Bot", layout="wide")
-
 # Sidebar for persona, theme, and model selection
 with st.sidebar:
     if st.button("📝 New Chat"):
