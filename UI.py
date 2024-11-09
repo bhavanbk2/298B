@@ -162,82 +162,17 @@ def apply_custom_css(theme):
         font-weight: bold;
         color: {text_color};
     }}
-    .subtitle-text {{
-        font-size: 20px; /* Increased size */
-        color: {text_color};
-        margin-top: -10px;
-    }}
-    .no-conversation {{
-        font-size: 20px;
-        color: #ffc107;
-        text-align: center;
-        margin-top: 20px;
-        font-style: italic;
-    }}
-    .tooltip {{
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        cursor: pointer;
-        margin-left: 5px;
-    }}
-    .tooltip .tooltiptext {{
-        visibility: hidden;
-        width: 150px;
-        background-color: #555;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 5px;
-        position: absolute;
-        z-index: 1;
-        left: 50%; /* Center the tooltip */
-        transform: translateX(-50%);
-        opacity: 0;
-        transition: opacity 0.3s;
-        font-size: 12px; /* Smaller font for the tooltip */
-        bottom: 30px; /* Adjusted position */
-    }}
-    .tooltip:hover .tooltiptext {{
-        visibility: visible;
-        opacity: 1;
-    }}
     .question-mark {{
-        width: 20px; /* Smaller size */
-        height: 20px; /* Smaller size */
-        border-radius: 50%;
-        background-color: {question_mark_color};
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: 12px; /* Slightly smaller font */
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        color: {question_mark_color};
+        font-size: 20px;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# Apply custom CSS based on theme
 apply_custom_css(theme)
 
-# Display the title and subtitle
-st.markdown(f"<h1 class='title-text'>💬 Persona based Conversational Bot</h1>", unsafe_allow_html=True)
-st.markdown(f"<p class='subtitle-text'>Ask me anything about health and wellness!</p>", unsafe_allow_html=True)
-
-# Tooltip with a refined question mark icon
-st.markdown("""
-    <div style='display: flex; align-items: center; margin-bottom: 10px;'>
-        <div class='tooltip'>
-            <div class='question-mark'>?</div>
-            <span class='tooltiptext'>Enter your question below</span>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-# Create a container for input and submission
+# Chat container with message inputs and avatar images
 col1, col2 = st.columns([4, 1])
-
 with col1:
     user_query = st.text_input("", label_visibility="collapsed")  # Hidden label
 with col2:
