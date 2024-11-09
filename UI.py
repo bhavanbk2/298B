@@ -3,12 +3,12 @@ import os
 from dotenv import load_dotenv
 import cohere
 from langchain_openai.chat_models import ChatOpenAI
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import embedding as emb
 from textblob import TextBlob
 import json
 import time
 import base64
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +20,11 @@ co = cohere.Client(api_key=os.getenv("COHERE_API_KEY"))
 openai_api_key = os.getenv("OPENAI_API_KEY")
 client = ChatOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo")
 
+# Initialize Hugging Face's Llama-3.2 model
+llama_model_name = "shashikumar1998/Llama-3.2-3B-Instruct"
+llama_tokenizer = AutoTokenizer.from_pretrained(llama_model_name)
+llama_model = AutoModelForCausalLM.from_pretrained(llama_model_name)
+
 # Get the embedding index
 index = emb.get_index("cohere-pinecone-tree")
 
@@ -27,52 +32,43 @@ index = emb.get_index("cohere-pinecone-tree")
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-# Function to generate responses for Cohere or OpenAI models
-def generate_response(query, model="openai"):
+# Dropdown to select the language model
+st.sidebar.markdown("### 🧠 Choose Language Model")
+st.session_state.model_choice = st.sidebar.selectbox(
+    "Select Model", 
+    ["OpenAI GPT-3.5", "Llama-3.2 (Hugging Face)"]
+)
+
+# Function to generate responses
+def generate_response(query):
     context = " ".join([f"User: {item['user']} Bot: {item['bot']}" for item in st.session_state.chat_history])
-    messages = [
-        {"role": "system", "content": f"You are a chatbot impersonating {st.session_state.persona}."},
-        {"role": "user", "content": f"{context} {query}"}
-    ]
+    full_query = f"{context} {query}"
+
     typing_animation()  # Simulate typing
 
     try:
-        if model == "openai":
+        # Select model based on user choice
+        if st.session_state.model_choice == "OpenAI GPT-3.5":
+            messages = [
+                {"role": "system", "content": f"You are a chatbot impersonating {st.session_state.persona}."},
+                {"role": "user", "content": full_query}
+            ]
             response = client(messages)
             response_text = response.content if hasattr(response, 'content') else str(response)
-        elif model == "cohere":
-            response = co.generate(prompt=query, max_tokens=200)
-            response_text = response.text
-        elif model == "llama":
-            response_text = generate_llama_response(query)
+
+        elif st.session_state.model_choice == "Llama-3.2 (Hugging Face)":
+            # Generate response with Llama-3.2
+            inputs = llama_tokenizer(full_query, return_tensors="pt")
+            outputs = llama_model.generate(inputs.input_ids, max_length=200)
+            response_text = llama_tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+        # Append to chat history and return
         st.session_state.chat_history.append({'user': query, 'bot': response_text})
         return response_text
 
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return "Sorry, I couldn't generate a response."
-
-# Function to generate responses for Llama-3.2 model
-def generate_llama_response(query):
-    # Load the model and tokenizer
-    model_name = "shashikumar1998/Llama-3.2-3B-Instruct"
-    config = AutoConfig.from_pretrained(model_name)
-    
-    # Modify the rope_scaling dictionary to fit the expected format
-    config.rope_scaling = {
-        'type': 'fixed',  # or another valid type
-        'factor': 32.0
-    }
-
-    # Load the model with the modified config
-    model = AutoModelForCausalLM.from_pretrained(model_name, config=config)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    # Tokenize the input and generate a response
-    inputs = tokenizer(query, return_tensors="pt")
-    outputs = model.generate(inputs['input_ids'], max_length=150)
-    response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return response_text
 
 # Add a typing animation to simulate response generation
 def typing_animation():
@@ -96,8 +92,6 @@ with st.sidebar:
     st.session_state.persona = st.selectbox("Select Persona", ["Sanjay Gupta", "Motivational Coach", "Friendly Assistant"])
     st.markdown("### 🌗 Toggle Theme")
     theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
-    st.markdown("### 🧑‍💻 Choose Model")
-    model_choice = st.selectbox("Select Model", ["OpenAI GPT-3.5", "Cohere", "Llama-3.2"])
 
 # Load images from repository
 user_avatar_path = "images/user_image.png"
@@ -162,39 +156,92 @@ def apply_custom_css(theme):
         font-weight: bold;
         color: {text_color};
     }}
-    .question-mark {{
-        color: {question_mark_color};
+    .subtitle-text {{
+        font-size: 20px; /* Increased size */
+        color: {text_color};
+        margin-top: -10px;
+    }}
+    .no-conversation {{
         font-size: 20px;
+        color: #ffc107;
+        text-align: center;
+        margin-top: 20px;
+        font-style: italic;
+    }}
+    .tooltip {{
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        cursor: pointer;
+        margin-left: 5px;
+    }}
+    .tooltip .tooltiptext {{
+        visibility: hidden;
+        width: 150px;
+        background-color: #555;
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 5px;
+        position: absolute;
+        z-index: 1;
+        left: 50%; /* Center the tooltip */
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.3s;
+        font-size: 12px; /* Smaller font for the tooltip */
+        bottom: 30px; /* Adjusted position */
+    }}
+    .tooltip:hover .tooltiptext {{
+        visibility: visible;
+        opacity: 1;
+    }}
+    .question-mark {{
+        width: 20px; /* Smaller size */
+        height: 20px; /* Smaller size */
+        border-radius: 50%;
+        background-color: {question_mark_color};
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 12px; /* Slightly smaller font */
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
     }}
     </style>
     """, unsafe_allow_html=True)
 
+# Apply custom CSS based on theme
 apply_custom_css(theme)
 
-# Chat container with message inputs and avatar images
+# Display the title and subtitle
+st.markdown(f"<h1 class='title-text'>💬 Persona based Conversational Bot</h1>", unsafe_allow_html=True)
+st.markdown(f"<p class='subtitle-text'>Ask me anything about health and wellness!</p>", unsafe_allow_html=True)
+
+# Tooltip with a refined question mark icon
+st.markdown("""
+    <div style='display: flex; align-items: center; margin-bottom: 10px;'>
+        <div class='tooltip'>
+            <div class='question-mark'>?</div>
+            <span class='tooltiptext'>Enter your question below</span>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+# Create a container for input and submission
 col1, col2 = st.columns([4, 1])
+
 with col1:
-    user_query = st.text_input("", label_visibility="collapsed")  # Hidden label
+    # Single input box with a fun placeholder
+    user_query = st.text_input("", placeholder="💡 What’s on your mind?", key="user_input", label_visibility="collapsed")
+
 with col2:
-    submit_button = st.button("Send")
-
-# Handle input and generate bot response
-if submit_button and user_query:
-    st.session_state.chat_history.append({'user': user_query, 'bot': "..."})  # Placeholder
-    response = generate_response(user_query, model=model_choice)
-
-    # Display the conversation with avatars
-    with st.container():
-        chat_container = st.empty()
-        chat_container.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        
-        for message in st.session_state.chat_history:
-            if message["user"]:
-                chat_container.markdown(f'<div class="chat-bubble chat-bubble-user"><img class="avatar" src="data:image/png;base64,{user_avatar_base64}"> {message["user"]}</div>', unsafe_allow_html=True)
-            if message["bot"]:
-                chat_container.markdown(f'<div class="chat-bubble chat-bubble-bot"><img class="avatar" src="data:image/png;base64,{bot_avatar_base64}"> {message["bot"]}</div>', unsafe_allow_html=True)
-        
-        chat_container.markdown('</div>', unsafe_allow_html=True)
-
-    # Rerun to update chat display
-    st.rerun()
+    if st.button("Send"):
+        if user_query:
+            # Generate bot response
+            bot_response = generate_response(user_query)
+            # Display bot response
+            st.write(f"**Bot**: {bot_response}")
+            # Clear the input box after sending
+            st.session_state.user_input = ""
