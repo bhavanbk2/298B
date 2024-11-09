@@ -8,6 +8,9 @@ from textblob import TextBlob
 import json
 import time
 import base64
+import openai
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 
 # Load environment variables
 load_dotenv()
@@ -15,9 +18,14 @@ load_dotenv()
 # Initialize Cohere client
 co = cohere.Client(api_key=os.getenv("COHERE_API_KEY"))
 
-# Initialize LangChain's ChatOpenAI client
+# Initialize LangChain's ChatOpenAI client (for GPT models)
 openai_api_key = os.getenv("OPENAI_API_KEY")
-client = ChatOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo")
+openai.api_key = openai_api_key
+
+# Initialize HuggingFace model for LLaMA (with a fallback method)
+llama_model_name = "meta-llama/Llama-2-7b-chat-hf"  # Example LLaMA model from HuggingFace
+llama_tokenizer = AutoTokenizer.from_pretrained(llama_model_name)
+llama_model = AutoModelForCausalLM.from_pretrained(llama_model_name)
 
 # Get the embedding index
 index = emb.get_index("cohere-pinecone-tree")
@@ -26,24 +34,42 @@ index = emb.get_index("cohere-pinecone-tree")
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-# Function to generate responses
-def generate_response(query):
+# Function to generate responses with OpenAI GPT
+def generate_response_gpt(query):
     context = " ".join([f"User: {item['user']} Bot: {item['bot']}" for item in st.session_state.chat_history])
-    messages = [
-        {"role": "system", "content": f"You are a chatbot impersonating {st.session_state.persona}."},
-        {"role": "user", "content": f"{context} {query}"}
-    ]
-    typing_animation()  # Simulate typing
+    prompt = f"{context}\nUser: {query}\nBot:"
 
     try:
-        response = client(messages)
-        response_text = response.content if hasattr(response, 'content') else str(response)
+        response = openai.Completion.create(
+            model="gpt-3.5-turbo",  # You can switch this to GPT-4 or another GPT model
+            prompt=prompt,
+            max_tokens=150
+        )
+        response_text = response.choices[0].text.strip()
         st.session_state.chat_history.append({'user': query, 'bot': response_text})
         return response_text
 
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return "Sorry, I couldn't generate a response."
+
+# Function to generate responses with LLaMA
+def generate_response_llama(query):
+    context = " ".join([f"User: {item['user']} Bot: {item['bot']}" for item in st.session_state.chat_history])
+    input_text = f"{context}\nUser: {query}\nBot:"
+
+    inputs = llama_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024)
+    
+    try:
+        with torch.no_grad():
+            outputs = llama_model.generate(**inputs, max_length=150, do_sample=True, top_k=50)
+        
+        response_text = llama_tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
+        st.session_state.chat_history.append({'user': query, 'bot': response_text})
+        return response_text
+    except Exception as e:
+        st.error(f"Error generating response with LLaMA: {e}")
+        return "Sorry, I couldn't generate a response with LLaMA."
 
 # Add a typing animation to simulate response generation
 def typing_animation():
@@ -65,6 +91,10 @@ with st.sidebar:
         st.session_state.chat_history.clear()
     st.markdown("### 🧠 Choose Assistant Personality")
     st.session_state.persona = st.selectbox("Select Persona", ["Sanjay Gupta", "Motivational Coach", "Friendly Assistant"])
+    
+    # Scrollable model selection
+    model_choice = st.selectbox("Select Model", ["GPT-3.5", "GPT-4", "LLaMA"], index=0, key="model_choice")
+    
     st.markdown("### 🌗 Toggle Theme")
     theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
 
@@ -195,14 +225,7 @@ st.markdown(f"<h1 class='title-text'>💬 Persona based Conversational Bot</h1>"
 st.markdown(f"<p class='subtitle-text'>Ask me anything about health and wellness!</p>", unsafe_allow_html=True)
 
 # Tooltip with a refined question mark icon
-st.markdown("""
-    <div style='display: flex; align-items: center; margin-bottom: 10px;'>
-        <div class='tooltip'>
-            <div class='question-mark'>?</div>
-            <span class='tooltiptext'>Enter your question below</span>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown("""<div style='display: flex; align-items: center; margin-bottom: 10px;'> <div class='tooltip'> <div class='question-mark'>?</div> <span class='tooltiptext'>Enter your question below</span> </div> </div>""", unsafe_allow_html=True)
 
 # Create a container for input and submission
 col1, col2 = st.columns([4, 1])
@@ -214,7 +237,12 @@ with col1:
 with col2:
     if st.button("→", key="submit_button", help="Submit your query"):
         if user_query:
-            response = generate_response(user_query)  # Generate response
+            if model_choice == "GPT-3.5":
+                response = generate_response_gpt(user_query)  # Generate response using GPT-3.5
+            elif model_choice == "GPT-4":
+                response = generate_response_gpt(user_query)  # Generate response using GPT-4
+            elif model_choice == "LLaMA":
+                response = generate_response_llama(user_query)  # Generate response using LLaMA
             if 'user_input' in st.session_state:
                 del st.session_state.user_input  # Remove the key to clear input
 
