@@ -92,7 +92,8 @@ def generate_response_llama(query):
     except Exception as e:
         print(f"Error generating response: {e}")  # Log error for debugging
         return f"Error: {e}"
-
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
         
 # Function to simulate typing animation
 def typing_animation():
