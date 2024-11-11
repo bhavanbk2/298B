@@ -57,32 +57,38 @@ def generate_response_gpt(query):
 # Function to generate responses from Hugging Face Llama 3.2 model
 def generate_response_llama(query):
     try:
-        model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Hugging Face model path
-        authenticate_hugging_face("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")  # Authenticate
-        
-        # Load model and tokenizer from Hugging Face
+        model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Model path
+        authenticate_hugging_face("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")  # Login to Hugging Face
+
+        print("Loading model and tokenizer...")  # Debugging statement
+        # Load model and tokenizer with forced download
         tokenizer = AutoTokenizer.from_pretrained(model_name, force_download=True)
         model = AutoModelForCausalLM.from_pretrained(model_name, force_download=True)
+        
+        # Check if model is loaded correctly
+        print("Model and tokenizer loaded successfully.")  # Debugging statement
 
-        # Make sure the model is in evaluation mode
+        # Ensure the model is in evaluation mode
         model.eval()
 
         # Tokenize the query
         inputs = tokenizer(query, return_tensors="pt")
 
-        # Generate response (ensure torch does not compute gradients during inference)
+        print("Query tokenized.")  # Debugging statement
+        
+        # Generate response (with no gradients)
         with torch.no_grad():
             outputs = model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
+
+        print("Response generated.")  # Debugging statement
 
         response = tokenizer.decode(outputs[0], skip_special_tokens=True)
         return response
 
     except Exception as e:
         print(f"Error generating response: {e}")
-        return "Error: Something went wrong while generating the response."
-
-    return response
-
+        return f"Error: {e}"
+        
 # Function to simulate typing animation
 def typing_animation():
     with st.spinner('Bot is typing...'):
@@ -248,7 +254,7 @@ st.markdown("""<div style='display: flex; align-items: center; margin-bottom: 10
 col1, col2 = st.columns([4, 1])
 
 with col1:
-    user_query = st.text_input("", placeholder="💡 What’s on your mind?", key="user_input", label_visibility="collapsed")
+    user_query = st.text_input("Your Question", placeholder="💡 What’s on your mind?", key="user_input", label_visibility="collapsed")
 
 with col2:
     if st.button("→", key="submit_button", help="Submit your query"):
