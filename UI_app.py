@@ -4,10 +4,12 @@ from dotenv import load_dotenv
 import cohere
 from langchain_openai.chat_models import ChatOpenAI
 import embedding as emb
-from textblob import TextBlob
 import json
 import time
 import base64
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import login
+import torch
 
 # Load environment variables
 load_dotenv()
@@ -26,8 +28,12 @@ index = emb.get_index("cohere-pinecone-tree")
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
-# Function to generate responses
-def generate_response(query):
+# Function to handle authentication with Hugging Face
+def authenticate_hugging_face(token):
+    login(token)  # This will authenticate using the provided token
+
+# Function to generate responses using GPT-3.5
+def generate_response_gpt(query):
     context = " ".join([f"User: {item['user']} Bot: {item['bot']}" for item in st.session_state.chat_history])
     messages = [
         {"role": "system", "content": f"You are a chatbot impersonating {st.session_state.persona}."},
@@ -45,7 +51,26 @@ def generate_response(query):
         st.error(f"Error generating response: {e}")
         return "Sorry, I couldn't generate a response."
 
-# Add a typing animation to simulate response generation
+# Function to generate responses from Hugging Face Llama 3.2 model
+def generate_response_llama(query):
+    model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Hugging Face model path
+    authenticate_hugging_face("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")  # Authenticate with the Hugging Face token
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+
+    # Encode the input query
+    inputs = tokenizer.encode(query, return_tensors="pt")
+
+    # Generate response
+    with torch.no_grad():
+        outputs = model.generate(inputs, max_length=200, num_return_sequences=1)
+
+    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    st.session_state.chat_history.append({'user': query, 'bot': response})
+    return response
+
+# Function to simulate typing animation
 def typing_animation():
     with st.spinner('Bot is typing...'):
         time.sleep(1)  # Simulate typing delay
@@ -65,6 +90,10 @@ with st.sidebar:
         st.session_state.chat_history.clear()
     st.markdown("### 🧠 Choose Assistant Personality")
     st.session_state.persona = st.selectbox("Select Persona", ["Sanjay Gupta", "Motivational Coach", "Friendly Assistant"])
+    
+    st.markdown("### 🤖 Choose AI Model")
+    model_choice = st.selectbox("Select Model", ["GPT-3.5", "Llama 3.2 (Hugging Face)", "Other Models"])
+
     st.markdown("### 🌗 Toggle Theme")
     theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
 
@@ -195,34 +224,31 @@ st.markdown(f"<h1 class='title-text'>💬 Persona based Conversational Bot</h1>"
 st.markdown(f"<p class='subtitle-text'>Ask me anything about health and wellness!</p>", unsafe_allow_html=True)
 
 # Tooltip with a refined question mark icon
-st.markdown("""
-    <div style='display: flex; align-items: center; margin-bottom: 10px;'>
-        <div class='tooltip'>
-            <div class='question-mark'>?</div>
-            <span class='tooltiptext'>Enter your question below</span>
-        </div>
+st.markdown("""<div style='display: flex; align-items: center; margin-bottom: 10px;'>
+    <div class='tooltip'>
+        <div class='question-mark'>?</div>
+        <span class='tooltiptext'>Enter your question below</span>
     </div>
-""", unsafe_allow_html=True)
+</div>""", unsafe_allow_html=True)
 
 # Create a container for input and submission
 col1, col2 = st.columns([4, 1])
 
 with col1:
-    # Single input box with a fun placeholder
     user_query = st.text_input("", placeholder="💡 What’s on your mind?", key="user_input", label_visibility="collapsed")
 
 with col2:
     if st.button("→", key="submit_button", help="Submit your query"):
         if user_query:
-            response = generate_response(user_query)  # Generate response
+            if model_choice == "GPT-3.5":
+                response = generate_response_gpt(user_query)
+            elif model_choice == "Llama 3.2 (Hugging Face)":
+                response = generate_response_llama(user_query)
+            else:
+                response = "Model choice not implemented."
+
             if 'user_input' in st.session_state:
                 del st.session_state.user_input  # Remove the key to clear input
-
-# Clear chat button
-if st.button("Clear Chat"):
-    st.session_state.chat_history.clear()  # Clear chat history
-    if 'user_input' in st.session_state:
-        del st.session_state.user_input  # Remove the key to clear input
 
 # Display chat messages in a conversational style
 if st.session_state.chat_history:
@@ -241,8 +267,3 @@ if st.session_state.chat_history:
     st.markdown("</div>", unsafe_allow_html=True)
 else:
     st.markdown("<p class='no-conversation'>🤖 No conversations yet. Ask a question!</p>", unsafe_allow_html=True)
-
-# Add option to download chat history
-if st.button("Download Chat History"):
-    chat_history_json = json.dumps(st.session_state.chat_history, indent=4)
-    st.download_button(label="Download", data=chat_history_json, file_name="chat_history.json", mime="application/json")
