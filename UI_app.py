@@ -61,9 +61,9 @@ def generate_response_llama(query):
         authenticate_hugging_face("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")  # Authenticate
         
         # Load model and tokenizer from Hugging Face
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        
+        tokenizer = AutoTokenizer.from_pretrained(model_name, force_download=True)
+        model = AutoModelForCausalLM.from_pretrained(model_name, force_download=True)
+
         # Make sure the model is in evaluation mode
         model.eval()
 
