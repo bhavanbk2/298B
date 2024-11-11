@@ -10,6 +10,9 @@ import base64
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from huggingface_hub import login
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import login
+import torch
 
 # Load environment variables
 load_dotenv()
@@ -53,21 +56,31 @@ def generate_response_gpt(query):
 
 # Function to generate responses from Hugging Face Llama 3.2 model
 def generate_response_llama(query):
-    model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Hugging Face model path
-    authenticate_hugging_face("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")  # Authenticate with the Hugging Face token
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    try:
+        model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Hugging Face model path
+        authenticate_hugging_face("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")  # Authenticate
+        
+        # Load model and tokenizer from Hugging Face
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        
+        # Make sure the model is in evaluation mode
+        model.eval()
 
-    # Encode the input query
-    inputs = tokenizer.encode(query, return_tensors="pt")
+        # Tokenize the query
+        inputs = tokenizer(query, return_tensors="pt")
 
-    # Generate response
-    with torch.no_grad():
-        outputs = model.generate(inputs, max_length=200, num_return_sequences=1)
+        # Generate response (ensure torch does not compute gradients during inference)
+        with torch.no_grad():
+            outputs = model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
 
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    st.session_state.chat_history.append({'user': query, 'bot': response})
+        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return response
+
+    except Exception as e:
+        print(f"Error generating response: {e}")
+        return "Error: Something went wrong while generating the response."
+
     return response
 
 # Function to simulate typing animation
