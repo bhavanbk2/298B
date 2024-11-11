@@ -60,12 +60,13 @@ def generate_response_llama(query):
         model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Model path
         authenticate_hugging_face("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")  # Login to Hugging Face
 
+        # Debugging: Check if model is being loaded
         print("Loading model and tokenizer...")  # Debugging statement
         # Load model and tokenizer with forced download
         tokenizer = AutoTokenizer.from_pretrained(model_name, force_download=True)
         model = AutoModelForCausalLM.from_pretrained(model_name, force_download=True)
         
-        # Check if model is loaded correctly
+        # Debugging: Confirm model loaded
         print("Model and tokenizer loaded successfully.")  # Debugging statement
 
         # Ensure the model is in evaluation mode
@@ -74,20 +75,24 @@ def generate_response_llama(query):
         # Tokenize the query
         inputs = tokenizer(query, return_tensors="pt")
 
+        # Debugging: Check if tokenization is successful
         print("Query tokenized.")  # Debugging statement
         
         # Generate response (with no gradients)
         with torch.no_grad():
             outputs = model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
 
+        # Debugging: Check if response is generated
         print("Response generated.")  # Debugging statement
 
+        # Decode the response
         response = tokenizer.decode(outputs[0], skip_special_tokens=True)
         return response
 
     except Exception as e:
-        print(f"Error generating response: {e}")
+        print(f"Error generating response: {e}")  # Log error for debugging
         return f"Error: {e}"
+
         
 # Function to simulate typing animation
 def typing_animation():
