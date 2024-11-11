@@ -8,11 +8,8 @@ import json
 import time
 import base64
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from huggingface_hub import login
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from huggingface_hub import login
-import torch
 
 # Load environment variables
 load_dotenv()
@@ -54,20 +51,13 @@ def generate_response_gpt(query):
         st.error(f"Error generating response: {e}")
         return "Sorry, I couldn't generate a response."
 
-# Function to generate responses from Hugging Face Llama 3.2 model
+# Function to generate responses from local Llama 3.2 model
 def generate_response_llama(query):
     try:
-        model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Model path
-        authenticate_hugging_face("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")  # Login to Hugging Face
-
-        # Debugging: Check if model is being loaded
-        print("Loading model and tokenizer...")  # Debugging statement
-        # Load model and tokenizer with forced download
-        tokenizer = AutoTokenizer.from_pretrained(model_name, force_download=True)
-        model = AutoModelForCausalLM.from_pretrained(model_name, force_download=True)
-        
-        # Debugging: Confirm model loaded
-        print("Model and tokenizer loaded successfully.")  # Debugging statement
+        # Local path to your Llama model folder
+        model_path = r"C:\Users\Checkout\Downloads\llama3_2_3b"  # Update this to your actual path
+        tokenizer = AutoTokenizer.from_pretrained(model_path, force_download=False)
+        model = AutoModelForCausalLM.from_pretrained(model_path, force_download=False)
 
         # Ensure the model is in evaluation mode
         model.eval()
@@ -75,15 +65,9 @@ def generate_response_llama(query):
         # Tokenize the query
         inputs = tokenizer(query, return_tensors="pt")
 
-        # Debugging: Check if tokenization is successful
-        print("Query tokenized.")  # Debugging statement
-        
         # Generate response (with no gradients)
         with torch.no_grad():
             outputs = model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
-
-        # Debugging: Check if response is generated
-        print("Response generated.")  # Debugging statement
 
         # Decode the response
         response = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -92,6 +76,7 @@ def generate_response_llama(query):
     except Exception as e:
         print(f"Error generating response: {e}")  # Log error for debugging
         return f"Error: {e}"
+
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
         
@@ -117,7 +102,7 @@ with st.sidebar:
     st.session_state.persona = st.selectbox("Select Persona", ["Sanjay Gupta", "Motivational Coach", "Friendly Assistant"])
     
     st.markdown("### 🤖 Choose AI Model")
-    model_choice = st.selectbox("Select Model", ["GPT-3.5", "Llama 3.2 (Hugging Face)", "Other Models"])
+    model_choice = st.selectbox("Select Model", ["GPT-3.5", "Llama 3.2 (Local)", "Other Models"])
 
     st.markdown("### 🌗 Toggle Theme")
     theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
@@ -267,7 +252,7 @@ with col2:
         if user_query:
             if model_choice == "GPT-3.5":
                 response = generate_response_gpt(user_query)
-            elif model_choice == "Llama 3.2 (Hugging Face)":
+            elif model_choice == "Llama 3.2 (Local)":
                 response = generate_response_llama(user_query)
             else:
                 response = "Model choice not implemented."
