@@ -4,7 +4,7 @@
 Aradhya A. Rathnakar, Bhavan K. Basavaraju, Mahamaya Panda, ReddySaketh R. Chappidi, and ShashiKumar K. Mallikarjuna
 
 _Department of Applied Data Science, San Jose State University
-DATA 298A: MSDA Project I
+DATA 298B: MSDA Project II
 Simon Shim
 May 13, 2024_
 
