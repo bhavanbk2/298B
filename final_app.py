@@ -1,65 +1,80 @@
 import streamlit as st
 import os
 from dotenv import load_dotenv
-import cohere
-import pinecone
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextStreamer
 import json
 import time
+import base64
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+from huggingface_hub import login
+from langchain_openai.chat_models import ChatOpenAI
 
 # Load environment variables
 load_dotenv()
 
-# Initialize Cohere client
-cohere_api_key = os.getenv("COHERE_API_KEY")
-cohere_client = cohere.Client(api_key=cohere_api_key)
-
-# Initialize Pinecone
-pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone.init(api_key=pinecone_api_key, environment="us-west1-gcp")
-index = pinecone.Index("cohere-pinecone-tree")
+# Initialize LangChain's ChatOpenAI client for GPT-3.5
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = ChatOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo")
 
 # Load Hugging Face token
 hf_token = os.getenv("Hugging_face_token")
 
-# Load Llama 3.2 model and tokenizer
+# Function to load Llama 3.2 model and tokenizer
 @st.cache_resource
 def load_llama_model():
     model_name = "shashikumar1998/Llama-3.2-3B-Instruct"
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=hf_token)
     model = AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token)
+    model.eval()
     return model, tokenizer
 
+# Load Llama 3.2
 model, tokenizer = load_llama_model()
 
-# Function to generate RAG response
-def generate_rag_response(query):
+# Initialize session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Function to generate responses using GPT-3.5
+def generate_response_gpt(query):
+    context = " ".join([f"User: {item['user']} Bot: {item['bot']}" for item in st.session_state.chat_history])
+    messages = [
+        {"role": "system", "content": f"You are a chatbot impersonating {st.session_state.persona}."},
+        {"role": "user", "content": f"{context} {query}"}
+    ]
+
     try:
-        # Step 1: Generate query embedding using Cohere
-        response = cohere_client.embed(texts=[query], model="embed-english-light-v2.0")
-        query_embedding = response.embeddings[0]
+        response = client(messages)
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        st.session_state.chat_history.append({'user': query, 'bot': response_text})
+        return response_text
 
-        # Step 2: Retrieve relevant documents from Pinecone
-        top_k = 5
-        results = index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
-        retrieved_context = "\n".join([result["metadata"]["text"] for result in results["matches"]])
-
-        # Step 3: Prepare input for the Llama model
-        prompt = f"Context: {retrieved_context}\nUser: {query}\nAssistant:"
-        inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-
-        # Step 4: Generate response
-        text_streamer = TextStreamer(tokenizer)
-        outputs = model.generate(
-            input_ids=inputs["input_ids"],
-            max_new_tokens=64,
-            temperature=0.5,
-            top_p=0.9,
-            streamer=text_streamer,
-        )
-        return tokenizer.decode(outputs[0], skip_special_tokens=True)
     except Exception as e:
-        return f"Error generating response: {e}"
+        st.error(f"Error generating response: {e}")
+        return "Sorry, I couldn't generate a response."
+
+# Function to generate responses using Llama 3.2
+def generate_response_llama(query):
+    try:
+        # Prepare input for Llama 3.2
+        inputs = tokenizer(query, return_tensors="pt").to("cuda")
+
+        # Generate response
+        with torch.no_grad():
+            outputs = model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
+        
+        # Decode and return response
+        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return response
+
+    except Exception as e:
+        st.error(f"Error generating response: {e}")
+        return f"Error: {e}"
+
+# Function to simulate typing animation
+def typing_animation():
+    with st.spinner('Bot is typing...'):
+        time.sleep(1)
 
 # Streamlit UI setup
 st.set_page_config(page_title="Conversational Bot", layout="wide")
@@ -67,50 +82,41 @@ st.set_page_config(page_title="Conversational Bot", layout="wide")
 # Sidebar for persona and theme selection
 with st.sidebar:
     if st.button("📝 New Chat"):
-        st.session_state.chat_history = []
-
+        st.session_state.chat_history.clear()
     st.markdown("### 🧠 Choose Assistant Personality")
-    st.session_state.persona = st.selectbox(
-        "Select Persona", ["Robert Kiyosaki", "Sanjay Gupta"]
-    )
-
+    st.session_state.persona = st.selectbox("Select Persona", ["Sanjay Gupta", "Motivational Coach", "Friendly Assistant"])
+    
     st.markdown("### 🤖 Choose AI Model")
-    model_choice = st.selectbox("Select Model", ["Llama 3.2 (RAG)", "Other Models"])
+    model_choice = st.selectbox("Select Model", ["GPT-3.5", "Llama 3.2 (Hugging Face)"])
 
     st.markdown("### 🌗 Toggle Theme")
     theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
 
-# Apply theme-specific CSS
+# Custom CSS for styling
 def apply_custom_css(theme):
     primary_color = "#121212" if theme == "Dark" else "#f5f5f7"
     text_color = "white" if theme == "Dark" else "black"
-    st.markdown(
-        f"""
-        <style>
-        body {{
-            background-color: {primary_color};
-            color: {text_color};
-        }}
-        .stApp {{
-            background-color: {primary_color};
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"""
+    <style>
+    body {{ background-color: {primary_color}; color: {text_color}; }}
+    .stApp {{ background-color: {primary_color}; }}
+    </style>
+    """, unsafe_allow_html=True)
 
 apply_custom_css(theme)
 
-# Chat input and output
+# Main content
 st.title("💬 Persona-Based Conversational Bot")
-user_query = st.text_input("Your Question", placeholder="💡 Ask a question")
+user_query = st.text_input("Your Question", placeholder="💡 Ask me anything!")
 
 if st.button("Submit"):
     if user_query:
-        if model_choice == "Llama 3.2 (RAG)":
-            response = generate_rag_response(user_query)
+        if model_choice == "GPT-3.5":
+            response = generate_response_gpt(user_query)
+        elif model_choice == "Llama 3.2 (Hugging Face)":
+            response = generate_response_llama(user_query)
         else:
-            response = "Model not implemented."
+            response = "Model choice not implemented."
 
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
@@ -118,7 +124,7 @@ if st.button("Submit"):
         st.session_state.chat_history.append({"user": user_query, "bot": response})
 
 # Display chat history
-if "chat_history" in st.session_state:
-    for interaction in st.session_state.chat_history:
-        st.markdown(f"**User:** {interaction['user']}")
-        st.markdown(f"**Bot:** {interaction['bot']}")
+if st.session_state.chat_history:
+    for chat in st.session_state.chat_history:
+        st.markdown(f"**User:** {chat['user']}")
+        st.markdown(f"**Bot:** {chat['bot']}")
