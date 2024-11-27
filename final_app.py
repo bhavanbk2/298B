@@ -3,11 +3,9 @@ import os
 from dotenv import load_dotenv
 import cohere
 import pinecone
-from unsloth import FastLanguageModel
-from transformers import TextStreamer
+from transformers import AutoTokenizer, AutoModelForCausalLM, TextStreamer
 import json
 import time
-import base64
 
 # Load environment variables
 load_dotenv()
@@ -25,22 +23,12 @@ index = pinecone.Index("cohere-pinecone-tree")
 hf_token = os.getenv("Hugging_face_token")
 
 # Load Llama 3.2 model and tokenizer
-max_seq_length = 2048
-dtype = None  # Auto-detect
-load_in_4bit = True  # Optimize memory usage
-
 @st.cache_resource
 def load_llama_model():
-    model_and_tokenizer = FastLanguageModel.from_pretrained(
-        model_name="shashikumar1998/Llama-3.2-3B-Instruct",
-        max_seq_length=max_seq_length,
-        dtype=dtype,
-        load_in_4bit=load_in_4bit,
-        token=hf_token,
-    )
-    if isinstance(model_and_tokenizer, tuple):
-        return model_and_tokenizer[0], model_and_tokenizer[1]
-    return model_and_tokenizer, None
+    model_name = "shashikumar1998/Llama-3.2-3B-Instruct"
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=hf_token)
+    model = AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token)
+    return model, tokenizer
 
 model, tokenizer = load_llama_model()
 
@@ -56,29 +44,20 @@ def generate_rag_response(query):
         results = index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
         retrieved_context = "\n".join([result["metadata"]["text"] for result in results["matches"]])
 
-        # Step 3: Prepare input for Llama model
-        messages = [
-            {"role": "system", "content": f"Context: {retrieved_context}"},
-            {"role": "user", "content": query},
-        ]
-        inputs = tokenizer.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_tensors="pt",
-        ).to("cuda")
+        # Step 3: Prepare input for the Llama model
+        prompt = f"Context: {retrieved_context}\nUser: {query}\nAssistant:"
+        inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 
         # Step 4: Generate response
-        text_streamer = TextStreamer(tokenizer, skip_prompt=True)
-        model.generate(
-            input_ids=inputs,
-            streamer=text_streamer,
-            use_cache=True,
-            temperature=0.5,
-            min_p=0.1,
+        text_streamer = TextStreamer(tokenizer)
+        outputs = model.generate(
+            input_ids=inputs["input_ids"],
             max_new_tokens=64,
+            temperature=0.5,
+            top_p=0.9,
+            streamer=text_streamer,
         )
-        return " ".join(text_streamer.history)  # Combine streamed tokens
+        return tokenizer.decode(outputs[0], skip_special_tokens=True)
     except Exception as e:
         return f"Error generating response: {e}"
 
