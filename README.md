@@ -1,4 +1,4 @@
-# 298A
+# 298B
 # SageSoulRAG: RAG-based Chatbot with Personality
 
 Aradhya A. Rathnakar, Bhavan K. Basavaraju, Mahamaya Panda, ReddySaketh R. Chappidi, and ShashiKumar K. Mallikarjuna
