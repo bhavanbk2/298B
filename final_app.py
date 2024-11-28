@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 import torch
 
 # Load environment variables
@@ -13,28 +14,33 @@ if not hf_token:
     st.error("Hugging Face token is missing. Add it to your .env file.")
     st.stop()
 
-# Function to load the Llama 3.2 model and tokenizer
+# Function to load the base model and adapter using PEFT
 @st.cache_resource
-def load_llama_model():
+def load_llama_with_adapter():
     try:
-        model_name = "shashikumar1998/Llama-3.2-3B-Instruct"  # Your Hugging Face model
-        # Load tokenizer and model using the Hugging Face token
-        tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=hf_token)
-        model = AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token)
+        base_model_name = "meta-llama/Llama-2-7b-hf"  # Replace with the correct base model
+        adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"  # Hugging Face adapter path
+
+        # Load the tokenizer and base model
+        tokenizer = AutoTokenizer.from_pretrained(base_model_name, use_auth_token=hf_token)
+        base_model = AutoModelForCausalLM.from_pretrained(base_model_name, use_auth_token=hf_token)
+
+        # Load the adapter
+        model = PeftModel.from_pretrained(base_model, adapter_path, use_auth_token=hf_token)
         model.eval()  # Set the model to evaluation mode
         return model, tokenizer
     except Exception as e:
-        st.error(f"Failed to load Llama 3.2 model: {e}")
+        st.error(f"Failed to load Llama model with adapter: {e}")
         raise
 
-# Load Llama 3.2 model and tokenizer
+# Load the model and tokenizer
 try:
-    llama_model, llama_tokenizer = load_llama_model()
+    llama_model, llama_tokenizer = load_llama_with_adapter()
 except Exception as e:
     st.error(f"Error: {e}")
     st.stop()
 
-# Function to generate responses using Llama 3.2
+# Function to generate responses using the Llama model
 def generate_response_llama(query):
     try:
         # Tokenize the input query
@@ -52,10 +58,10 @@ def generate_response_llama(query):
         return f"Error: {e}"
 
 # Streamlit UI setup
-st.set_page_config(page_title="Llama 3.2 Bot", layout="wide")
+st.set_page_config(page_title="Llama 3.2 with Adapter", layout="wide")
 
 # Main app content
-st.title("💬 Llama 3.2 Conversational Bot")
+st.title("💬 Llama 3.2 Conversational Bot with LoRA Adapter")
 user_query = st.text_input("Your Question", placeholder="💡 Ask me anything!")
 
 if st.button("Generate"):
