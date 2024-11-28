@@ -28,10 +28,10 @@ def load_llama_model():
     model.eval()
     return model, tokenizer
 
-# Load Llama 3.2
+# Load Llama 3.2 model and tokenizer
 model, tokenizer = load_llama_model()
 
-# Initialize session state
+# Initialize session state for chat history
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -42,13 +42,11 @@ def generate_response_gpt(query):
         {"role": "system", "content": f"You are a chatbot impersonating {st.session_state.persona}."},
         {"role": "user", "content": f"{context} {query}"}
     ]
-
     try:
         response = client(messages)
         response_text = response.content if hasattr(response, 'content') else str(response)
         st.session_state.chat_history.append({'user': query, 'bot': response_text})
         return response_text
-
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return "Sorry, I couldn't generate a response."
@@ -56,17 +54,16 @@ def generate_response_gpt(query):
 # Function to generate responses using Llama 3.2
 def generate_response_llama(query):
     try:
-        # Prepare input for Llama 3.2
+        # Tokenize the query
         inputs = tokenizer(query, return_tensors="pt").to("cuda")
 
         # Generate response
         with torch.no_grad():
             outputs = model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
-        
-        # Decode and return response
+
+        # Decode and return the response
         response = tokenizer.decode(outputs[0], skip_special_tokens=True)
         return response
-
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return f"Error: {e}"
@@ -85,27 +82,33 @@ with st.sidebar:
         st.session_state.chat_history.clear()
     st.markdown("### 🧠 Choose Assistant Personality")
     st.session_state.persona = st.selectbox("Select Persona", ["Sanjay Gupta", "Motivational Coach", "Friendly Assistant"])
-    
     st.markdown("### 🤖 Choose AI Model")
     model_choice = st.selectbox("Select Model", ["GPT-3.5", "Llama 3.2 (Hugging Face)"])
-
     st.markdown("### 🌗 Toggle Theme")
     theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
 
-# Custom CSS for styling
+# Apply theme-specific CSS
 def apply_custom_css(theme):
     primary_color = "#121212" if theme == "Dark" else "#f5f5f7"
     text_color = "white" if theme == "Dark" else "black"
-    st.markdown(f"""
-    <style>
-    body {{ background-color: {primary_color}; color: {text_color}; }}
-    .stApp {{ background-color: {primary_color}; }}
-    </style>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <style>
+        body {{
+            background-color: {primary_color};
+            color: {text_color};
+        }}
+        .stApp {{
+            background-color: {primary_color};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 apply_custom_css(theme)
 
-# Main content
+# Main app
 st.title("💬 Persona-Based Conversational Bot")
 user_query = st.text_input("Your Question", placeholder="💡 Ask me anything!")
 
