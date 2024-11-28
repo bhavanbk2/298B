@@ -45,28 +45,53 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
+
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the Llama model handler."""
         try:
             st.info("Initializing Llama model... This may take a few moments.")
             
+            # Get Hugging Face token
+            hf_token = os.getenv("HUGGINGFACE_TOKEN")
+            if not hf_token:
+                raise ValueError("Hugging Face token not found in environment variables")
+            
+            # Login to Hugging Face
+            login(token=hf_token)
+            
             model_path = "shashikumar1998/Llama-3.2-3B-Instruct"
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
-            # Load tokenizer with explicit padding token
-            self.tokenizer = AutoTokenizer.from_pretrained(
+            # Load configuration first
+            config = AutoConfig.from_pretrained(
                 model_path,
+                token=hf_token,
                 trust_remote_code=True
             )
+            
+            # Load tokenizer with configuration
+            st.info("Loading tokenizer...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_path,
+                token=hf_token,
+                trust_remote_code=True,
+                config=config,
+                use_fast=False  # Use slow tokenizer if fast fails
+            )
+            
+            # Set padding token
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            # Load model with optimizations
+            # Load model with configuration
+            st.info("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
+                token=hf_token,
                 trust_remote_code=True,
+                config=config,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
                 low_cpu_mem_usage=True
