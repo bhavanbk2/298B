@@ -6,7 +6,6 @@ import time
 import base64
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
-from huggingface_hub import login
 from langchain_openai.chat_models import ChatOpenAI
 
 # Load environment variables
@@ -23,13 +22,17 @@ hf_token = os.getenv("Hugging_face_token")
 @st.cache_resource
 def load_llama_model():
     model_name = "shashikumar1998/Llama-3.2-3B-Instruct"
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=hf_token)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False, use_auth_token=hf_token)
     model = AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token)
     model.eval()
     return model, tokenizer
 
 # Load Llama 3.2 model and tokenizer
-model, tokenizer = load_llama_model()
+try:
+    model, tokenizer = load_llama_model()
+except Exception as e:
+    st.error(f"Failed to load Llama 3.2 model or tokenizer: {e}")
+    st.stop()
 
 # Initialize session state for chat history
 if "chat_history" not in st.session_state:
