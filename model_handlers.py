@@ -1,28 +1,32 @@
 import os
 from abc import ABC, abstractmethod
 from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
-from huggingface_hub import login
 import streamlit as st
-import os
-from abc import ABC, abstractmethod
-import streamlit as st
-import torch
+from typing import List, Dict
 
 class ModelHandler(ABC):
     @abstractmethod
-    def generate_response(self, query, persona, chat_history):
+    def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         pass
 
 class GPTHandler(ModelHandler):
     def __init__(self):
-        self.client = ChatOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-3.5-turbo"
-        )
+        try:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OpenAI API key not found in environment variables")
+            
+            self.client = ChatOpenAI(
+                api_key=api_key,
+                model="gpt-3.5-turbo"
+            )
+        except Exception as e:
+            st.error(f"Error initializing GPT handler: {str(e)}")
+            raise
     
-    def generate_response(self, query, persona, chat_history):
+    def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         try:
             context = " ".join([
                 f"User: {item['user']} Bot: {item['bot']}" 
@@ -41,126 +45,112 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
-
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
-from typing import List, Dict
-import os
-
-class LlamaHandler:
+class LlamaHandler(ModelHandler):
     def __init__(self, model_path: str = "shashikumar1998/Llama-3.2-3B-Instruct"):
-        """
-        Initialize the Llama model handler.
-        
-        Args:
-            model_path: Path to the saved Llama model directory
-        """
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        # Load tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-            device_map="auto"
-        )
-        
-        # Move model to appropriate device
-        self.model.to(self.device)
-        
-        # Set default parameters
-        self.max_length = 2048
-        self.temperature = 0.7
-        self.top_p = 0.95
-    
-    def _format_chat_history(self, chat_history: List[Dict[str, str]]) -> str:
-        """
-        Format chat history into a single string.
-        
-        Args:
-            chat_history: List of dictionaries containing 'user' and 'bot' messages
-        
-        Returns:
-            Formatted chat history string
-        """
-        formatted_history = ""
-        for chat in chat_history:
-            formatted_history += f"User: {chat['user']}\nAssistant: {chat['bot']}\n"
-        return formatted_history
+        """Initialize the Llama model handler."""
+        try:
+            st.info("Initializing Llama model... This may take a few moments.")
+            
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            st.info(f"Using device: {self.device}")
+            
+            # Load tokenizer with explicit padding token
+            self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            
+            # Load model with optimizations
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device_map="auto",
+                low_cpu_mem_usage=True
+            )
+            
+            # Generation parameters
+            self.max_length = 512  # Reduced for better performance
+            self.temperature = 0.7
+            self.top_p = 0.95
+            
+            st.success("Llama model loaded successfully!")
+            
+        except Exception as e:
+            st.error(f"Error initializing Llama model: {str(e)}")
+            raise
     
     def _format_prompt(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
-        """
-        Format the input prompt with persona and chat history.
+        """Format the input prompt."""
+        # Simplified prompt template for 3B model
+        system_prompt = f"You are a {persona}. Be helpful and concise."
         
-        Args:
-            user_input: Current user message
-            persona: Selected persona (e.g., "Friendly Assistant", "Technical Expert")
-            chat_history: Previous conversation history
+        # Include only last 2 interactions for context
+        recent_history = chat_history[-2:] if chat_history else []
+        history_text = "\n".join([
+            f"User: {chat['user']}\nAssistant: {chat['bot']}"
+            for chat in recent_history
+        ])
         
-        Returns:
-            Formatted prompt string
-        """
-        # Add persona-specific instructions
-        persona_instructions = {
-            "Friendly Assistant": "You are a friendly and helpful assistant. Respond in a casual, warm manner.",
-            "Technical Expert": "You are a technical expert. Provide detailed, technical responses with precise information.",
-            "Creative Writer": "You are a creative writer. Write engaging, imaginative responses with literary flair."
-        }
-        
-        system_prompt = persona_instructions.get(persona, persona_instructions["Friendly Assistant"])
-        chat_history_text = self._format_chat_history(chat_history)
-        
-        # Combine all elements into final prompt
-        full_prompt = f"""{system_prompt}
+        return f"""{system_prompt}
 
-Previous conversation:
-{chat_history_text}
+{history_text}
 
 User: {user_input}
 Assistant:"""
-        
-        return full_prompt
     
     def generate_response(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
-        """
-        Generate a response using the Llama model.
-        
-        Args:
-            user_input: User's message
-            persona: Selected persona
-            chat_history: Previous conversation history
-        
-        Returns:
-            Generated response string
-        """
+        """Generate a response using the Llama model."""
         try:
-            # Format the prompt
+            # Format prompt
             prompt = self._format_prompt(user_input, persona, chat_history)
             
-            # Tokenize input
-            inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, 
-                                  max_length=self.max_length).to(self.device)
+            # Tokenize with proper padding
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+                padding=True
+            ).to(self.device)
             
-            # Generate response
+            # Generate with error handling
             with torch.no_grad():
-                generated_ids = self.model.generate(
-                    inputs.input_ids,
-                    max_length=self.max_length,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.pad_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id
-                )
-            
-            # Decode response
-            response = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-            
-            # Extract only the assistant's response
-            response = response.split("Assistant:")[-1].strip()
-            
-            return response
+                try:
+                    generated_ids = self.model.generate(
+                        inputs.input_ids,
+                        max_length=self.max_length,
+                        temperature=self.temperature,
+                        top_p=self.top_p,
+                        do_sample=True,
+                        pad_token_id=self.tokenizer.pad_token_id,
+                        eos_token_id=self.tokenizer.eos_token_id,
+                        num_return_sequences=1
+                    )
+                    
+                    response = self.tokenizer.decode(
+                        generated_ids[0],
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=True
+                    )
+                    
+                    # Extract only the assistant's response
+                    response_parts = response.split("Assistant:")
+                    if len(response_parts) > 1:
+                        response = response_parts[-1].strip()
+                    else:
+                        response = response_parts[0].strip()
+                    
+                    # Truncate if too long
+                    if len(response) > 1000:
+                        response = response[:1000] + "..."
+                    
+                    return response
+                    
+                except torch.cuda.OutOfMemoryError:
+                    st.warning("GPU memory exceeded. Falling back to CPU...")
+                    self.model.to("cpu")
+                    self.device = "cpu"
+                    return self.generate_response(user_input, persona, chat_history)
             
         except Exception as e:
-            print(f"Error generating response: {str(e)}")
-            return "I apologize, but I encountered an error while generating a response. Please try again."
+            st.error(f"Error generating response: {str(e)}")
+            return "I apologize, but I encountered an error. Please try again."
