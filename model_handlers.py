@@ -48,7 +48,7 @@ from typing import List, Dict
 import os
 
 class LlamaHandler:
-    def __init__(self, model_path: str = "path/to/your/llama/model"):
+    def __init__(self, model_path: str = "shashikumar1998/Llama-3.2-3B-Instruct"):
         """
         Initialize the Llama model handler.
         
