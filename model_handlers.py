@@ -52,14 +52,6 @@ class LlamaHandler(ModelHandler):
         try:
             st.info("Initializing Llama model... This may take a few moments.")
             
-            # Get Hugging Face token
-            hf_token = os.getenv("HUGGINGFACE_TOKEN")
-            if not hf_token:
-                raise ValueError("Hugging Face token not found in environment variables")
-            
-            # Login to Hugging Face
-            login(token=hf_token)
-            
             model_path = "shashikumar1998/Llama-3.2-3B-Instruct"
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
@@ -67,7 +59,6 @@ class LlamaHandler(ModelHandler):
             # Load configuration first
             config = AutoConfig.from_pretrained(
                 model_path,
-                token=hf_token,
                 trust_remote_code=True
             )
             
@@ -75,10 +66,9 @@ class LlamaHandler(ModelHandler):
             st.info("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_path,
-                token=hf_token,
                 trust_remote_code=True,
                 config=config,
-                use_fast=False  # Use slow tokenizer if fast fails
+                use_fast=False  # Use slow tokenizer for better compatibility
             )
             
             # Set padding token
@@ -89,7 +79,6 @@ class LlamaHandler(ModelHandler):
             st.info("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
-                token=hf_token,
                 trust_remote_code=True,
                 config=config,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
