@@ -10,36 +10,7 @@ from abc import ABC, abstractmethod
 import streamlit as st
 import torch
 
-# Unsloth imports
-try:
-    from unsloth import FastLanguageModel
-except ImportError:
-    raise ImportError("Please install unsloth: pip install --upgrade --no-cache-dir 'unsloth[cuda] @ git+https://github.com/unslothai/unsloth.git'")
-
-# Transformers import
-from transformers import TextStreamer
-
-# RAG-related imports
-try:
-    import cohere
-    from pinecone import Pinecone
-except ImportError:
-    raise ImportError("Please install required packages: pip install cohere pinecone-client")
-
-class ModelHandler(ABC):
-    @abstractmethod
-    def generate_response(self, query, persona, chat_history):
-        pass
-
-class GPTHandler(ModelHandler):
-    def __init__(self):
-        self.client = ChatOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model="gpt-3.5-turbo"
-        )
-        
-    
-    def generate_response(self, query, persona, chat_history):
+def generate_response(self, query, persona, chat_history):
         try:
             context = " ".join([
                 f"User: {item['user']} Bot: {item['bot']}" 
@@ -59,84 +30,125 @@ class GPTHandler(ModelHandler):
             return "Sorry, I encountered an error. Please try again."
 
 
-class OptimizedLlamaHandler(ModelHandler):
-    class OptimizedLlamaHandler(ModelHandler):
-    def __init__(self):
-        self.authenticate()
-        self.initialize_model()
-    
-    def authenticate(self):
-        try:
-            self.hf_token = os.getenv("HUGGING_FACE_TOKEN")
-            if not self.hf_token:
-                st.error("Hugging Face token not found!")
-                return False
-            login(token=self.hf_token)
-            return True
-        except Exception as e:
-            st.error(f"Hugging Face authentication failed: {str(e)}")
-            return False
-            
-    def initialize_model(self):
-        try:
-            if 'llama_model' not in st.session_state:
-                max_seq_length = 3072  # You can adjust this
-                dtype = None  # Auto detection
-                
-                model_and_tokenizer = FastLanguageModel.from_pretrained(
-                    model_name="shashikumar1998/Llama-3.2-3B-Instruct",
-                    max_seq_length=max_seq_length,
-                    dtype=dtype,
-                    token=self.hf_token
-                )
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+from typing import List, Dict
+import os
 
-                if isinstance(model_and_tokenizer, tuple):
-                    st.session_state.llama_model = model_and_tokenizer[0]
-                    st.session_state.llama_tokenizer = model_and_tokenizer[1]
-                else:
-                    st.session_state.llama_model = model_and_tokenizer
-                    
-        except Exception as e:
-            st.error(f"Error initializing Llama model: {str(e)}")
+class LlamaHandler:
+    def __init__(self, model_path: str = "path/to/your/llama/model"):
+        """
+        Initialize the Llama model handler.
+        
+        Args:
+            model_path: Path to the saved Llama model directory
+        """
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # Load tokenizer and model
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_path,
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            device_map="auto"
+        )
+        
+        # Move model to appropriate device
+        self.model.to(self.device)
+        
+        # Set default parameters
+        self.max_length = 2048
+        self.temperature = 0.7
+        self.top_p = 0.95
     
-    def generate_response(self, query, persona, chat_history):
-        try:
-            if not hasattr(st.session_state, 'llama_model'):
-                return "Model not initialized. Please try again."
-            
-            # Get context from recent chat history
-            context = " ".join([
-                f"User: {item['user']} Assistant: {item['bot']}" 
-                for item in chat_history[-3:]
-            ])
-            
-            # Prepare the prompt
-            prompt = f"""<s>[INST] You are a {persona}.
-            Previous conversation: {context}
-            Current query: {query} [/INST]"""
-            
-            # Prepare inputs
-            inputs = st.session_state.llama_tokenizer(
-                [prompt],
-                return_tensors="pt"
-            ).to("cuda" if torch.cuda.is_available() else "cpu")
+    def _format_chat_history(self, chat_history: List[Dict[str, str]]) -> str:
+        """
+        Format chat history into a single string.
+        
+        Args:
+            chat_history: List of dictionaries containing 'user' and 'bot' messages
+        
+        Returns:
+            Formatted chat history string
+        """
+        formatted_history = ""
+        for chat in chat_history:
+            formatted_history += f"User: {chat['user']}\nAssistant: {chat['bot']}\n"
+        return formatted_history
+    
+    def _format_prompt(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
+        """
+        Format the input prompt with persona and chat history.
+        
+        Args:
+            user_input: Current user message
+            persona: Selected persona (e.g., "Friendly Assistant", "Technical Expert")
+            chat_history: Previous conversation history
+        
+        Returns:
+            Formatted prompt string
+        """
+        # Add persona-specific instructions
+        persona_instructions = {
+            "Friendly Assistant": "You are a friendly and helpful assistant. Respond in a casual, warm manner.",
+            "Technical Expert": "You are a technical expert. Provide detailed, technical responses with precise information.",
+            "Creative Writer": "You are a creative writer. Write engaging, imaginative responses with literary flair."
+        }
+        
+        system_prompt = persona_instructions.get(persona, persona_instructions["Friendly Assistant"])
+        chat_history_text = self._format_chat_history(chat_history)
+        
+        # Combine all elements into final prompt
+        full_prompt = f"""{system_prompt}
 
+Previous conversation:
+{chat_history_text}
+
+User: {user_input}
+Assistant:"""
+        
+        return full_prompt
+    
+    def generate_response(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
+        """
+        Generate a response using the Llama model.
+        
+        Args:
+            user_input: User's message
+            persona: Selected persona
+            chat_history: Previous conversation history
+        
+        Returns:
+            Generated response string
+        """
+        try:
+            # Format the prompt
+            prompt = self._format_prompt(user_input, persona, chat_history)
+            
+            # Tokenize input
+            inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, 
+                                  max_length=self.max_length).to(self.device)
+            
             # Generate response
-            with st.spinner("Generating response..."):
-                # For inference
-                FastLanguageModel.for_inference(st.session_state.llama_model)
-                
-                outputs = st.session_state.llama_model.generate(
-                    **inputs,
-                    max_new_tokens=512,
-                    use_cache=True,
-                    temperature=0.7,
-                    min_p=0.1
+            with torch.no_grad():
+                generated_ids = self.model.generate(
+                    inputs.input_ids,
+                    max_length=self.max_length,
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id
                 )
-                
-                response = st.session_state.llama_tokenizer.batch_decode(outputs)[0]
-                return response.split('[/INST]')[-1].strip()
+            
+            # Decode response
+            response = self.tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+            
+            # Extract only the assistant's response
+            response = response.split("Assistant:")[-1].strip()
+            
+            return response
             
         except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
-            return "Sorry, I encountered an error. Please try again."
+            print(f"Error generating response: {str(e)}")
+            return "I apologize, but I encountered an error while generating a response. Please try again."
