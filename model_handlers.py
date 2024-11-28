@@ -5,6 +5,26 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 from huggingface_hub import login
 import streamlit as st
+import os
+from abc import ABC, abstractmethod
+import streamlit as st
+import torch
+
+# Unsloth imports
+try:
+    from unsloth import FastLanguageModel
+except ImportError:
+    raise ImportError("Please install unsloth: pip install --upgrade --no-cache-dir 'unsloth[cuda] @ git+https://github.com/unslothai/unsloth.git'")
+
+# Transformers import
+from transformers import TextStreamer
+
+# RAG-related imports
+try:
+    import cohere
+    from pinecone import Pinecone
+except ImportError:
+    raise ImportError("Please install required packages: pip install cohere pinecone-client")
 
 class ModelHandler(ABC):
     @abstractmethod
@@ -17,6 +37,7 @@ class GPTHandler(ModelHandler):
             api_key=os.getenv("OPENAI_API_KEY"),
             model="gpt-3.5-turbo"
         )
+        
     
     def generate_response(self, query, persona, chat_history):
         try:
@@ -37,7 +58,8 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
-class LlamaHandler(ModelHandler):
+
+class OptimizedLlamaHandler(ModelHandler):
     def __init__(self):
         self.authenticate()
         self.initialize_model()
