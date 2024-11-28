@@ -1,7 +1,6 @@
 import streamlit as st
 import os
 from dotenv import load_dotenv
-import time
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from langchain_openai.chat_models import ChatOpenAI
@@ -9,18 +8,28 @@ from langchain_openai.chat_models import ChatOpenAI
 # Load environment variables
 load_dotenv()
 
+# Explicitly retrieve Hugging Face token
+hf_token = os.getenv("Hugging_face_token")
+if not hf_token:
+    st.error("Hugging Face token is missing. Add it to your .env file or log in using `huggingface-cli login`.")
+    st.stop()
+
 # Initialize OpenAI GPT-3.5 Client
 openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    st.error("OpenAI API key is missing. Add it to your .env file.")
+    st.stop()
 client = ChatOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo")
 
-# Hugging Face model and tokenizer loading
+# Function to load Llama 2 model
 @st.cache_resource
 def load_llama_model():
     try:
         model_name = "meta-llama/Llama-2-7b-hf"  # Hugging Face model name
-        # Load tokenizer and model
-        tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=True)
-        model = AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=True)
+
+        # Load tokenizer and model using explicit token
+        tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=hf_token)
+        model = AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token)
         model.eval()  # Set the model to evaluation mode
         return model, tokenizer
     except Exception as e:
