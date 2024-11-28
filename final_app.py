@@ -1,10 +1,9 @@
 import streamlit as st
 import os
 from dotenv import load_dotenv
-import json
 import time
-import base64
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
 import torch
 from langchain_openai.chat_models import ChatOpenAI
 
@@ -18,20 +17,30 @@ client = ChatOpenAI(api_key=openai_api_key, model="gpt-3.5-turbo")
 # Load Hugging Face token
 hf_token = os.getenv("Hugging_face_token")
 
-# Function to load Llama 3.2 model and tokenizer
+# Function to load Llama 3.2 base model with LoRA adapter
 @st.cache_resource
-def load_llama_model():
-    model_name = "shashikumar1998/Llama-3.2-3B-Instruct"
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False, use_auth_token=hf_token)
-    model = AutoModelForCausalLM.from_pretrained(model_name, use_auth_token=hf_token)
-    model.eval()
-    return model, tokenizer
+def load_llama_with_adapter():
+    try:
+        base_model_name = "meta-llama/Llama-2-7b-hf"  # Compatible base model
+        adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"  # Hugging Face path for adapter
 
-# Load Llama 3.2 model and tokenizer
+        # Load tokenizer and base model
+        tokenizer = AutoTokenizer.from_pretrained(base_model_name, use_fast=False, use_auth_token=hf_token)
+        base_model = AutoModelForCausalLM.from_pretrained(base_model_name, use_auth_token=hf_token)
+
+        # Load LoRA adapter
+        model = PeftModel.from_pretrained(base_model, adapter_path)
+        model.eval()  # Set model to evaluation mode
+        return model, tokenizer
+    except Exception as e:
+        st.error(f"Failed to load Llama 3.2 model with LoRA adapter: {e}")
+        raise
+
+# Load Llama 3.2 with adapter
 try:
-    model, tokenizer = load_llama_model()
+    llama_model, llama_tokenizer = load_llama_with_adapter()
 except Exception as e:
-    st.error(f"Failed to load Llama 3.2 model or tokenizer: {e}")
+    st.error(f"Error: {e}")
     st.stop()
 
 # Initialize session state for chat history
@@ -58,23 +67,18 @@ def generate_response_gpt(query):
 def generate_response_llama(query):
     try:
         # Tokenize the query
-        inputs = tokenizer(query, return_tensors="pt").to("cuda")
+        inputs = llama_tokenizer(query, return_tensors="pt").to("cuda")
 
         # Generate response
         with torch.no_grad():
-            outputs = model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
+            outputs = llama_model.generate(inputs["input_ids"], max_length=200, num_return_sequences=1)
 
         # Decode and return the response
-        response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        response = llama_tokenizer.decode(outputs[0], skip_special_tokens=True)
         return response
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return f"Error: {e}"
-
-# Function to simulate typing animation
-def typing_animation():
-    with st.spinner('Bot is typing...'):
-        time.sleep(1)
 
 # Streamlit UI setup
 st.set_page_config(page_title="Conversational Bot", layout="wide")
@@ -86,7 +90,7 @@ with st.sidebar:
     st.markdown("### 🧠 Choose Assistant Personality")
     st.session_state.persona = st.selectbox("Select Persona", ["Sanjay Gupta", "Motivational Coach", "Friendly Assistant"])
     st.markdown("### 🤖 Choose AI Model")
-    model_choice = st.selectbox("Select Model", ["GPT-3.5", "Llama 3.2 (Hugging Face)"])
+    model_choice = st.selectbox("Select Model", ["GPT-3.5", "Llama 3.2 (Hugging Face with LoRA)"])
     st.markdown("### 🌗 Toggle Theme")
     theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
 
@@ -119,7 +123,7 @@ if st.button("Submit"):
     if user_query:
         if model_choice == "GPT-3.5":
             response = generate_response_gpt(user_query)
-        elif model_choice == "Llama 3.2 (Hugging Face)":
+        elif model_choice == "Llama 3.2 (Hugging Face with LoRA)":
             response = generate_response_llama(user_query)
         else:
             response = "Model choice not implemented."
