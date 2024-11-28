@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM, AutoConfig
 import torch
 import streamlit as st
 from typing import List, Dict
@@ -55,22 +55,32 @@ class LlamaHandler(ModelHandler):
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
+            # Configure model loading with proper RoPE settings
+            config = AutoConfig.from_pretrained(
+                model_path,
+                trust_remote_code=True,
+                rope_scaling={
+                    "type": "dynamic",
+                    "factor": 2.0
+                }
+            )
+            
             # Load tokenizer
             st.info("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_path,
                 trust_remote_code=True,
-                use_fast=False  # Use slow tokenizer for better compatibility
+                use_fast=False
             )
             
-            # Set padding token
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            # Load model
+            # Load model with configuration
             st.info("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
+                config=config,
                 trust_remote_code=True,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
@@ -90,8 +100,8 @@ class LlamaHandler(ModelHandler):
     
     def _format_prompt(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         """Format the input prompt."""
-        # Simplified prompt template for 3B model
-        system_prompt = f"You are a {persona}. Be helpful and concise."
+        # Simplified prompt template for insurance-specific model
+        system_prompt = f"You are a {persona} specializing in insurance. Be helpful and concise."
         
         # Include only last 2 interactions for context
         recent_history = chat_history[-2:] if chat_history else []
