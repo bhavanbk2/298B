@@ -45,7 +45,6 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
-
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the Llama model handler."""
@@ -56,18 +55,11 @@ class LlamaHandler(ModelHandler):
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
-            # Load configuration first
-            config = AutoConfig.from_pretrained(
-                model_path,
-                trust_remote_code=True
-            )
-            
-            # Load tokenizer with configuration
+            # Load tokenizer
             st.info("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_path,
                 trust_remote_code=True,
-                config=config,
                 use_fast=False  # Use slow tokenizer for better compatibility
             )
             
@@ -75,12 +67,11 @@ class LlamaHandler(ModelHandler):
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            # Load model with configuration
+            # Load model
             st.info("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 trust_remote_code=True,
-                config=config,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
                 low_cpu_mem_usage=True
