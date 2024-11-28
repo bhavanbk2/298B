@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
 import streamlit as st
 from typing import List, Dict
@@ -30,7 +30,7 @@ class GPTHandler(ModelHandler):
         try:
             context = " ".join([
                 f"User: {item['user']} Bot: {item['bot']}" 
-                for item in chat_history[-3:]  # Last 3 interactions
+                for item in chat_history[-3:]
             ])
             
             messages = [
@@ -46,33 +46,27 @@ class GPTHandler(ModelHandler):
             return "Sorry, I encountered an error. Please try again."
 
 class LlamaHandler(ModelHandler):
-    def __init__(self, model_path: str = "shashikumar1998/Llama-3.2-3B-Instruct"):
-        """Initialize the Llama model handler."""
+    def __init__(self):
+        """Initialize the TinyLlama model handler."""
         try:
             st.info("Initializing Llama model... This may take a few moments.")
+            
+            # Use TinyLlama model
+            model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
             
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
-            # Load tokenizer with explicit padding token
-            self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            # Load model with optimizations
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_path,
+            # Create the pipeline directly
+            self.pipeline = pipeline(
+                "text-generation",
+                model=model_name,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
-                low_cpu_mem_usage=True
+                model_kwargs={"low_cpu_mem_usage": True}
             )
             
-            # Generation parameters
-            self.max_length = 512  # Reduced for better performance
-            self.temperature = 0.7
-            self.top_p = 0.95
-            
-            st.success("Llama model loaded successfully!")
+            st.success("Model loaded successfully!")
             
         except Exception as e:
             st.error(f"Error initializing Llama model: {str(e)}")
@@ -80,7 +74,7 @@ class LlamaHandler(ModelHandler):
     
     def _format_prompt(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         """Format the input prompt."""
-        # Simplified prompt template for 3B model
+        # Simplified prompt template
         system_prompt = f"You are a {persona}. Be helpful and concise."
         
         # Include only last 2 interactions for context
@@ -90,66 +84,43 @@ class LlamaHandler(ModelHandler):
             for chat in recent_history
         ])
         
-        return f"""{system_prompt}
-
-{history_text}
-
-User: {user_input}
-Assistant:"""
+        # TinyLlama specific prompt format
+        return f"<|system|>{system_prompt}</s><|user|>{history_text}\n{user_input}</s><|assistant|>"
     
     def generate_response(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
-        """Generate a response using the Llama model."""
+        """Generate a response using the model."""
         try:
             # Format prompt
             prompt = self._format_prompt(user_input, persona, chat_history)
             
-            # Tokenize with proper padding
-            inputs = self.tokenizer(
+            # Generate response using pipeline
+            response = self.pipeline(
                 prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=self.max_length,
-                padding=True
-            ).to(self.device)
+                max_new_tokens=512,
+                temperature=0.7,
+                top_p=0.95,
+                do_sample=True,
+                num_return_sequences=1,
+                pad_token_id=self.pipeline.tokenizer.pad_token_id if hasattr(self.pipeline.tokenizer, 'pad_token_id') else None,
+            )[0]['generated_text']
             
-            # Generate with error handling
-            with torch.no_grad():
-                try:
-                    generated_ids = self.model.generate(
-                        inputs.input_ids,
-                        max_length=self.max_length,
-                        temperature=self.temperature,
-                        top_p=self.top_p,
-                        do_sample=True,
-                        pad_token_id=self.tokenizer.pad_token_id,
-                        eos_token_id=self.tokenizer.eos_token_id,
-                        num_return_sequences=1
-                    )
-                    
-                    response = self.tokenizer.decode(
-                        generated_ids[0],
-                        skip_special_tokens=True,
-                        clean_up_tokenization_spaces=True
-                    )
-                    
-                    # Extract only the assistant's response
-                    response_parts = response.split("Assistant:")
-                    if len(response_parts) > 1:
-                        response = response_parts[-1].strip()
-                    else:
-                        response = response_parts[0].strip()
-                    
-                    # Truncate if too long
-                    if len(response) > 1000:
-                        response = response[:1000] + "..."
-                    
-                    return response
-                    
-                except torch.cuda.OutOfMemoryError:
-                    st.warning("GPU memory exceeded. Falling back to CPU...")
-                    self.model.to("cpu")
-                    self.device = "cpu"
-                    return self.generate_response(user_input, persona, chat_history)
+            # Extract assistant's response
+            response_parts = response.split("<|assistant|>")
+            if len(response_parts) > 1:
+                response = response_parts[-1].split("</s>")[0].strip()
+            else:
+                response = response_parts[0].strip()
+            
+            # Truncate if too long
+            if len(response) > 1000:
+                response = response[:1000] + "..."
+            
+            return response
+            
+        except torch.cuda.OutOfMemoryError:
+            st.warning("GPU memory exceeded. Falling back to CPU...")
+            self.pipeline.device = torch.device('cpu')
+            return self.generate_response(user_input, persona, chat_history)
             
         except Exception as e:
             st.error(f"Error generating response: {str(e)}")
