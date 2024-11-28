@@ -38,7 +38,7 @@ class GPTHandler(ModelHandler):
             return "Sorry, I encountered an error. Please try again."
 
 class LlamaHandler(ModelHandler):
-    d    def __init__(self):
+    def __init__(self):
         self.authenticate()
         self.initialize_model()
         self.initialize_rag()
