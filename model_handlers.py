@@ -10,7 +10,19 @@ from abc import ABC, abstractmethod
 import streamlit as st
 import torch
 
-def generate_response(self, query, persona, chat_history):
+class ModelHandler(ABC):
+    @abstractmethod
+    def generate_response(self, query, persona, chat_history):
+        pass
+
+class GPTHandler(ModelHandler):
+    def __init__(self):
+        self.client = ChatOpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            model="gpt-3.5-turbo"
+        )
+    
+    def generate_response(self, query, persona, chat_history):
         try:
             context = " ".join([
                 f"User: {item['user']} Bot: {item['bot']}" 
