@@ -19,6 +19,14 @@ from typing import List, Dict
 # Disable unnecessary warnings
 logging.set_verbosity_error()
 
+import torch
+
+# Check if CUDA is available
+if torch.cuda.is_available():
+    DEVICE = torch.device("cuda")
+else:
+    DEVICE = torch.device("cpu")
+
 
 # Initialize constants
 MAX_SEQ_LENGTH = 2048  # Sequence length for the model
@@ -81,6 +89,7 @@ class LlamaHandler(ModelHandler):
                 token=HF_TOKEN
             )
 
+            # Unpack model and tokenizer if returned as a tuple
             if isinstance(self.model_and_tokenizer, tuple):
                 self.model = self.model_and_tokenizer[0]
                 self.tokenizer = self.model_and_tokenizer[1]
@@ -88,12 +97,15 @@ class LlamaHandler(ModelHandler):
                 self.model = self.model_and_tokenizer
                 self.tokenizer = None  # Adjust based on library response
 
+            # Move model to the detected device (CPU/GPU)
+            self.model.to(DEVICE)
+
             # Initialize Cohere and Pinecone
             self.cohere_client = cohere.Client(COHERE_API_KEY)
             self.pc = Pinecone(api_key=PINECONE_API_KEY)
             self.index = self.pc.Index("cohere-pinecone-tree")
 
-            print("Model, Cohere, and Pinecone initialized successfully!")
+            print(f"Model initialized successfully on device: {DEVICE}")
 
         except Exception as e:
             print(f"Error initializing FastLanguageModelHandler: {e}")
@@ -120,7 +132,7 @@ class LlamaHandler(ModelHandler):
                 tokenize=True,
                 add_generation_prompt=True,
                 return_tensors="pt",
-            ).to("cuda")
+            ).to(DEVICE)
 
             # Step 4: Generate response using the model
             outputs = self.model.generate(
@@ -130,14 +142,7 @@ class LlamaHandler(ModelHandler):
                 temperature=0.5,
                 min_p=0.1,
             )
-            text_streamer = TextStreamer(self.tokenizer, skip_prompt=True)
-            response_text = self.model.generate(
-                input_ids=inputs,
-                streamer=text_streamer,
-                use_cache=True,
-                temperature=0.5,
-                min_p=0.1
-            )
+            response_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
             return response_text
 
