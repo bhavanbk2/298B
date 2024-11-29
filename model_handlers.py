@@ -64,7 +64,6 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
-
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the PEFT-adapted Llama model handler."""
@@ -72,13 +71,13 @@ class LlamaHandler(ModelHandler):
             st.info("Initializing model...")
             
             adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"
+            base_model_name = "meta-llama/Llama-2-7b-chat-hf"  # Changed base model
             
-            # Load PEFT config first to get base model name
+            # Load PEFT config
             st.info("Loading PEFT configuration...")
             peft_config = PeftConfig.from_pretrained(adapter_path)
-            base_model_name = peft_config.base_model_name_or_path
             
-            # Configure quantization
+            # Configure 4-bit quantization
             st.info("Setting up quantization configuration...")
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -94,7 +93,7 @@ class LlamaHandler(ModelHandler):
                 quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
-                use_cache=False
+                use_cache=True
             )
             
             # Load adapter weights
