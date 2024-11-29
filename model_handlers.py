@@ -64,6 +64,7 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
+
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the PEFT-adapted Llama model handler."""
@@ -71,11 +72,11 @@ class LlamaHandler(ModelHandler):
             st.info("Initializing model...")
             
             adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"
-            base_model_name = "meta-llama/Llama-2-7b-chat-hf"  # Changed base model
             
             # Load PEFT config
             st.info("Loading PEFT configuration...")
             peft_config = PeftConfig.from_pretrained(adapter_path)
+            base_model_name = peft_config.base_model_name_or_path
             
             # Configure 4-bit quantization
             st.info("Setting up quantization configuration...")
@@ -93,7 +94,7 @@ class LlamaHandler(ModelHandler):
                 quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
-                use_cache=True
+                token=os.getenv("HUGGINGFACE_TOKEN")
             )
             
             # Load adapter weights
@@ -101,6 +102,7 @@ class LlamaHandler(ModelHandler):
             self.model = PeftModel.from_pretrained(
                 base_model,
                 adapter_path,
+                token=os.getenv("HUGGINGFACE_TOKEN"),
                 device_map="auto"
             )
             
@@ -109,7 +111,7 @@ class LlamaHandler(ModelHandler):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 base_model_name,
                 trust_remote_code=True,
-                use_fast=False
+                token=os.getenv("HUGGINGFACE_TOKEN")
             )
             
             if self.tokenizer.pad_token is None:
