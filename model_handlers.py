@@ -89,7 +89,7 @@ class LlamaHandler(ModelHandler):
                 model_name="shashikumar1998/Llama-3.2-3B-Instruct",
                 max_seq_length=MAX_SEQ_LENGTH,
                 dtype=DTYPE,
-                load_in_4bit=LOAD_IN_4BIT,
+                load_in_4bit=LOAD_IN_4BIT,  # Disable 4-bit quantization for CPU
                 token=HF_TOKEN
             )
 
