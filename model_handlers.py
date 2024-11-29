@@ -24,16 +24,6 @@ from typing import List, Dict
 # Disable unnecessary warnings
 logging.set_verbosity_error()
 
-# Monkey patch for RoPE scaling
-def patch_rope_scaling(config_dict):
-    if 'rope_scaling' in config_dict:
-        rope = config_dict['rope_scaling']
-        if isinstance(rope, dict) and 'factor' in rope:
-            config_dict['rope_scaling'] = {
-                "type": "linear",
-                "factor": float(rope['factor'])
-            }
-    return config_dict
 class ModelHandler(ABC):
     @abstractmethod
     def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
@@ -95,10 +85,8 @@ class LlamaHandler(ModelHandler):
                 bnb_4bit_use_double_quant=False
             )
             
-            # Load base model with quantization and patched config
-            st.info(f"Loading base model from {base_model_name}...")
-            
-            # First, download the config
+            # Create base config
+            st.info("Setting up model configuration...")
             from huggingface_hub import hf_hub_download
             import json
             
@@ -110,18 +98,37 @@ class LlamaHandler(ModelHandler):
                 )
                 with open(config_file, 'r') as f:
                     config_dict = json.load(f)
-                    # Patch RoPE scaling
-                    config_dict = patch_rope_scaling(config_dict)
-                st.info("Successfully patched model configuration")
                 
-                # Create config object from dict
-                config = PretrainedConfig.from_dict(config_dict)
-                
+                # Create custom Llama config
+                config = LlamaConfig(
+                    vocab_size=config_dict.get('vocab_size', 32000),
+                    hidden_size=config_dict.get('hidden_size', 4096),
+                    intermediate_size=config_dict.get('intermediate_size', 11008),
+                    num_hidden_layers=config_dict.get('num_hidden_layers', 32),
+                    num_attention_heads=config_dict.get('num_attention_heads', 32),
+                    num_key_value_heads=config_dict.get('num_key_value_heads', 32),
+                    hidden_act=config_dict.get('hidden_act', 'silu'),
+                    max_position_embeddings=config_dict.get('max_position_embeddings', 4096),
+                    initializer_range=config_dict.get('initializer_range', 0.02),
+                    rms_norm_eps=config_dict.get('rms_norm_eps', 1e-6),
+                    use_cache=config_dict.get('use_cache', True),
+                    pad_token_id=config_dict.get('pad_token_id', 0),
+                    bos_token_id=config_dict.get('bos_token_id', 1),
+                    eos_token_id=config_dict.get('eos_token_id', 2),
+                    pretraining_tp=1,
+                    tie_word_embeddings=False,
+                    rope_scaling={
+                        "type": "linear",
+                        "factor": 2.0
+                    }
+                )
+                st.info("Successfully created model configuration")
             except Exception as e:
-                st.warning(f"Could not patch config: {str(e)}, proceeding with default config")
+                st.warning(f"Could not create custom config: {str(e)}, proceeding with default config")
                 config = None
             
-            # Load the model
+            # Load base model
+            st.info(f"Loading base model from {base_model_name}...")
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
                 config=config if config is not None else None,
