@@ -52,7 +52,7 @@ class LlamaHandler(ModelHandler):
         try:
             st.info("Initializing Llama model... This may take a few moments.")
             
-            adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"
+            adapter_path = "meta-llama/Llama-2-7b-chat-hf"
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
