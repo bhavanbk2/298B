@@ -21,10 +21,12 @@ logging.set_verbosity_error()
 
 import torch
 
-# Check if CUDA is available
-if torch.cuda.is_available():
-    DEVICE = torch.device("cuda")
-else:
+try:
+    if torch.cuda.is_available():
+        DEVICE = torch.device("cuda")
+    else:
+        DEVICE = torch.device("cpu")
+except Exception:
     DEVICE = torch.device("cpu")
 
 
