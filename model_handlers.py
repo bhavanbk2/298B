@@ -96,31 +96,25 @@ class LlamaHandler(ModelHandler):
                 bnb_4bit_use_double_quant=False
             )
             
-            # Load base model with quantization and patched config
+            # Load and modify configuration
+            st.info("Loading model configuration...")
+            config = AutoConfig.from_pretrained(
+                base_model_name,
+                trust_remote_code=True,
+                token=os.getenv("HUGGINGFACE_TOKEN")
+            )
+            
+            # Modify RoPE scaling
+            config.rope_scaling = {
+                "type": "linear",
+                "factor": 2.0
+            }
+            
+            # Load base model with quantization
             st.info(f"Loading base model from {base_model_name}...")
-            
-            # First, download the config
-            from huggingface_hub import hf_hub_download
-            import json
-            
-            try:
-                config_file = hf_hub_download(
-                    repo_id=base_model_name,
-                    filename="config.json",
-                    token=os.getenv("HUGGINGFACE_TOKEN")
-                )
-                with open(config_file, 'r') as f:
-                    config_dict = json.load(f)
-                    # Patch RoPE scaling
-                    config_dict = patch_rope_scaling(config_dict)
-                st.info("Successfully patched model configuration")
-            except Exception as e:
-                st.warning(f"Could not patch config: {str(e)}, proceeding with default config")
-            
-            # Load the model
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
-                config_dict=config_dict if 'config_dict' in locals() else None,
+                config=config,
                 quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
