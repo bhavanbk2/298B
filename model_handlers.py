@@ -24,6 +24,16 @@ from typing import List, Dict
 # Disable unnecessary warnings
 logging.set_verbosity_error()
 
+# Monkey patch for RoPE scaling
+def patch_rope_scaling(config_dict):
+    if 'rope_scaling' in config_dict:
+        rope = config_dict['rope_scaling']
+        if isinstance(rope, dict) and 'factor' in rope:
+            config_dict['rope_scaling'] = {
+                "type": "linear",
+                "factor": float(rope['factor'])
+            }
+    return config_dict
 
 class ModelHandler(ABC):
     @abstractmethod
@@ -77,27 +87,6 @@ class LlamaHandler(ModelHandler):
             peft_config = PeftConfig.from_pretrained(adapter_path)
             base_model_name = peft_config.base_model_name_or_path
             
-            # Load and modify base model config
-            st.info("Setting up model configuration...")
-            config = AutoConfig.from_pretrained(base_model_name, trust_remote_code=True)
-            
-            # Fix RoPE scaling configuration
-            if hasattr(config, 'rope_scaling'):
-                old_rope_scaling = config.rope_scaling
-                st.info(f"Original RoPE scaling: {json.dumps(old_rope_scaling, indent=2)}")
-                
-                # Ensure only 'type' and 'factor' fields are retained
-                if isinstance(old_rope_scaling, dict):
-                    rope_scaling_type = "dynamic"  # Default to "dynamic" or set based on requirements
-                    rope_scaling_factor = old_rope_scaling.get("factor", 2.0)  # Default to 2.0 if not present
-                    config.rope_scaling = {
-                        "type": rope_scaling_type,
-                        "factor": rope_scaling_factor
-                    }
-                    st.info(f"Modified RoPE scaling: {json.dumps(config.rope_scaling, indent=2)}")
-                else:
-                    raise ValueError("Invalid format for rope_scaling in model configuration.")
-            
             # Configure 4-bit quantization
             st.info("Setting up quantization configuration...")
             bnb_config = BitsAndBytesConfig(
@@ -107,11 +96,31 @@ class LlamaHandler(ModelHandler):
                 bnb_4bit_use_double_quant=False
             )
             
-            # Load base model with modified config and quantization
+            # Load base model with quantization and patched config
             st.info(f"Loading base model from {base_model_name}...")
+            
+            # First, download the config
+            from huggingface_hub import hf_hub_download
+            import json
+            
+            try:
+                config_file = hf_hub_download(
+                    repo_id=base_model_name,
+                    filename="config.json",
+                    token=os.getenv("HUGGINGFACE_TOKEN")
+                )
+                with open(config_file, 'r') as f:
+                    config_dict = json.load(f)
+                    # Patch RoPE scaling
+                    config_dict = patch_rope_scaling(config_dict)
+                st.info("Successfully patched model configuration")
+            except Exception as e:
+                st.warning(f"Could not patch config: {str(e)}, proceeding with default config")
+            
+            # Load the model
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
-                config=config,
+                config_dict=config_dict if 'config_dict' in locals() else None,
                 quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
