@@ -8,7 +8,7 @@ class LlamaAPIHandler:
         """Initialize the API handler."""
         try:
             # Add your token here
-            self.api_token = "hf_your_token_here"  # Replace with your actual token
+            self.api_token = "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"  # Replace with your actual token
             
             # API configuration
             self.api_url = "https://api-inference.huggingface.co/models/shashikumar1998/Llama-3.2-3B-Instruct"
