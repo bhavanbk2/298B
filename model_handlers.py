@@ -70,27 +70,23 @@ class LlamaHandler(ModelHandler):
             peft_config = PeftConfig.from_pretrained(adapter_path)
             base_model_name = peft_config.base_model_name_or_path
             
-            # Load and modify base model config
-            st.info("Setting up base model configuration...")
-            base_config = AutoConfig.from_pretrained(
-                base_model_name,
-                trust_remote_code=True
+            # Configure quantization
+            st.info("Setting up quantization configuration...")
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=False
             )
-            # Set correct RoPE scaling
-            base_config.rope_scaling = {
-                "type": "linear",
-                "factor": 2.0
-            }
             
-            # Load base model with modified config
+            # Load base model with quantization
             st.info(f"Loading base model from {base_model_name}...")
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
-                config=base_config,
-                torch_dtype=torch.float16,
+                quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
-                low_cpu_mem_usage=True
+                use_cache=False
             )
             
             # Load adapter weights
@@ -98,11 +94,10 @@ class LlamaHandler(ModelHandler):
             self.model = PeftModel.from_pretrained(
                 base_model,
                 adapter_path,
-                torch_dtype=torch.float16,
                 device_map="auto"
             )
             
-            # Load tokenizer from base model
+            # Load tokenizer
             st.info("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 base_model_name,
