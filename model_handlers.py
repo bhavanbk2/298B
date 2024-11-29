@@ -1,12 +1,13 @@
 import os
 from abc import ABC, abstractmethod
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from transformers.models.llama import LlamaConfig  # Correct import for LlamaConfig
+from transformers.models.llama import LlamaConfig
 from transformers.utils import logging
 from peft import PeftModel, PeftConfig
 import torch
 import streamlit as st
 from typing import List, Dict
+from langchain_openai.chat_models import ChatOpenAI
 
 # Disable unnecessary warnings
 logging.set_verbosity_error()
@@ -63,16 +64,20 @@ class LlamaHandler(ModelHandler):
             peft_config = PeftConfig.from_pretrained(adapter_path)
             base_model_name = peft_config.base_model_name_or_path
             
-            # Configure 4-bit quantization
+            # Set compute dtype
+            compute_dtype = torch.float16
+            
+            # Configure 4-bit quantization with updated settings
             st.info("Setting up quantization configuration...")
-           bnb_config = BitsAndBytesConfig(
-                        load_in_4bit=True,
-                        bnb_4bit_quant_type="nf4",
-                        bnb_4bit_compute_dtype=torch.float16,
-                        bnb_4bit_use_double_quant=False,
-                       llm_int8_threshold=6.0,
-                        llm_int8_has_fp16_weight=False,
-                        bnb_4bit_quant_storage="auto")
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=compute_dtype,
+                bnb_4bit_use_double_quant=False,
+                llm_int8_threshold=6.0,
+                llm_int8_has_fp16_weight=False,
+                bnb_4bit_quant_storage="auto"
+            )
             
             # Create base config
             st.info("Setting up model configuration...")
