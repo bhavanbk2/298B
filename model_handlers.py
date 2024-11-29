@@ -16,6 +16,40 @@ class ModelHandler(ABC):
     def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         pass
 
+class GPTHandler(ModelHandler):
+    def __init__(self):
+        try:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OpenAI API key not found in environment variables")
+            
+            self.client = ChatOpenAI(
+                api_key=api_key,
+                model="gpt-3.5-turbo"
+            )
+        except Exception as e:
+            st.error(f"Error initializing GPT handler: {str(e)}")
+            raise
+    
+    def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
+        try:
+            context = " ".join([
+                f"User: {item['user']} Bot: {item['bot']}" 
+                for item in chat_history[-3:]
+            ])
+            
+            messages = [
+                {"role": "system", "content": f"You are a {persona}. Respond accordingly."},
+                {"role": "user", "content": f"{context} {query}"}
+            ]
+            
+            response = self.client(messages)
+            return response.content
+            
+        except Exception as e:
+            st.error(f"Error with GPT: {str(e)}")
+            return "Sorry, I encountered an error. Please try again."
+
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the PEFT-adapted Llama model handler."""
