@@ -12,7 +12,7 @@ import streamlit as st
 from typing import List, Dict
 import os
 from abc import ABC, abstractmethod
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from peft import PeftModel, PeftConfig
 import torch
 import streamlit as st
@@ -70,10 +70,23 @@ class LlamaHandler(ModelHandler):
             peft_config = PeftConfig.from_pretrained(adapter_path)
             base_model_name = peft_config.base_model_name_or_path
             
-            # Load base model
+            # Load and modify base model config
+            st.info("Setting up base model configuration...")
+            base_config = AutoConfig.from_pretrained(
+                base_model_name,
+                trust_remote_code=True
+            )
+            # Set correct RoPE scaling
+            base_config.rope_scaling = {
+                "type": "linear",
+                "factor": 2.0
+            }
+            
+            # Load base model with modified config
             st.info(f"Loading base model from {base_model_name}...")
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
+                config=base_config,
                 torch_dtype=torch.float16,
                 device_map="auto",
                 trust_remote_code=True,
@@ -110,6 +123,7 @@ class LlamaHandler(ModelHandler):
         except Exception as e:
             st.error(f"Error initializing model: {str(e)}")
             st.error(f"Error type: {type(e)}")
+            st.error(f"Base model name: {base_model_name}")
             raise
 
     def generate_response(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
