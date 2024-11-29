@@ -64,25 +64,6 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
-
-import os
-from abc import ABC, abstractmethod
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, AutoConfig
-from transformers.utils import logging
-from peft import PeftModel, PeftConfig
-import torch
-import streamlit as st
-from typing import List, Dict
-import json
-
-# Disable unnecessary warnings
-logging.set_verbosity_error()
-
-class ModelHandler(ABC):
-    @abstractmethod
-    def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
-        pass
-
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the PEFT-adapted Llama model handler."""
