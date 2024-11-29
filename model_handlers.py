@@ -86,12 +86,17 @@ class LlamaHandler(ModelHandler):
                 old_rope_scaling = config.rope_scaling
                 st.info(f"Original RoPE scaling: {json.dumps(old_rope_scaling, indent=2)}")
                 
-                # Modify rope_scaling to match expected format
-                config.rope_scaling = {
-                    "type": "dynamic",  # Adjust this based on your model's requirements
-                    "factor": old_rope_scaling.get('factor', 2.0)
-                }
-                st.info(f"Modified RoPE scaling: {json.dumps(config.rope_scaling, indent=2)}")
+                # Ensure only 'type' and 'factor' fields are retained
+                if isinstance(old_rope_scaling, dict):
+                    rope_scaling_type = "dynamic"  # Default to "dynamic" or set based on requirements
+                    rope_scaling_factor = old_rope_scaling.get("factor", 2.0)  # Default to 2.0 if not present
+                    config.rope_scaling = {
+                        "type": rope_scaling_type,
+                        "factor": rope_scaling_factor
+                    }
+                    st.info(f"Modified RoPE scaling: {json.dumps(config.rope_scaling, indent=2)}")
+                else:
+                    raise ValueError("Invalid format for rope_scaling in model configuration.")
             
             # Configure 4-bit quantization
             st.info("Setting up quantization configuration...")
@@ -208,4 +213,3 @@ User: {user_input} [/INST]"""
         except Exception as e:
             st.error(f"Error generating response: {str(e)}")
             return "I apologize, but I encountered an error. Please try again."
-
