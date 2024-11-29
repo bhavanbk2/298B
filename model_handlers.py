@@ -52,13 +52,41 @@ class LlamaHandler(ModelHandler):
         try:
             st.info("Initializing model...")
             
-            # Initialize text generation pipeline
-            self.pipe = pipeline(
-                "text-generation",
-                model="shashikumar1998/Llama-3.2-3B-Instruct",
-                device_map="auto",
-                torch_dtype=torch.float16,
+            model_path = "shashikumar1998/Llama-3.2-3B-Instruct"
+            
+            # Create configuration with proper RoPE settings
+            st.info("Setting up configuration...")
+            config = AutoConfig.from_pretrained(
+                model_path,
                 trust_remote_code=True
+            )
+            # Override RoPE scaling with correct format
+            config.rope_scaling = {
+                "type": "linear",
+                "factor": 2.0
+            }
+            
+            # Load tokenizer
+            st.info("Loading tokenizer...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_path,
+                use_fast=False,
+                trust_remote_code=True
+            )
+            
+            # Ensure padding token is set
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            
+            # Load model with modified config
+            st.info("Loading model...")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                config=config,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                trust_remote_code=True,
+                low_cpu_mem_usage=True
             )
             
             # Set generation parameters
@@ -70,6 +98,7 @@ class LlamaHandler(ModelHandler):
             
         except Exception as e:
             st.error(f"Error initializing model: {str(e)}")
+            st.error(f"Error type: {type(e)}")
             raise
 
     def generate_response(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
@@ -93,18 +122,33 @@ Previous conversation:
 
 User: {user_input} [/INST]"""
 
-            # Generate response
-            outputs = self.pipe(
+            # Tokenize input
+            inputs = self.tokenizer(
                 prompt,
-                max_new_tokens=512,
-                temperature=0.7,
-                top_p=0.95,
-                num_return_sequences=1,
-                do_sample=True
-            )
-            
-            # Extract response
-            response = outputs[0]['generated_text']
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.max_length,
+                padding=True
+            ).to(self.model.device)
+
+            # Generate response
+            with torch.no_grad():
+                generated_ids = self.model.generate(
+                    inputs.input_ids,
+                    max_length=self.max_length,
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    num_return_sequences=1
+                )
+                
+                response = self.tokenizer.decode(
+                    generated_ids[0],
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=True
+                )
             
             # Clean up response
             if "[/INST]" in response:
