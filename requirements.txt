@@ -42,3 +42,4 @@ sentencepiece>=0.1.99
 huggingface-hub>=0.14.0
 unsloth
 bitsandbytes>=0.41.0
+requests
