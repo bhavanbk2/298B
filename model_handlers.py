@@ -1,8 +1,8 @@
 import os
 from abc import ABC, abstractmethod
-from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer
-from huggingface_hub import login, list_repo_files, HfApi
+from transformers import AutoModelForCausalLM, AutoTokenizer
+# Add this import
+from transformers import pipeline
 import torch
 import streamlit as st
 from typing import List, Dict
