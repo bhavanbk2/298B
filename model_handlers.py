@@ -1,8 +1,12 @@
 import os
 from abc import ABC, abstractmethod
-from transformers import AutoModelForCausalLM, AutoTokenizer
-# Add this import
-from transformers import pipeline
+# Fix imports from transformers
+from transformers import (
+    AutoModelForCausalLM, 
+    AutoTokenizer, 
+    AutoConfig,
+    PreTrainedTokenizer
+)
 import torch
 import streamlit as st
 from typing import List, Dict
@@ -46,6 +50,8 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
+
+
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the Llama model handler."""
@@ -60,6 +66,7 @@ class LlamaHandler(ModelHandler):
                 model_path,
                 trust_remote_code=True
             )
+            
             # Override RoPE scaling with correct format
             config.rope_scaling = {
                 "type": "linear",
