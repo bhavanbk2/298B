@@ -1,21 +1,8 @@
 import os
 from abc import ABC, abstractmethod
-# Fix imports from transformers
-from transformers import (
-    AutoModelForCausalLM, 
-    AutoTokenizer, 
-    AutoConfig,
-    PreTrainedTokenizer
-)
-import torch
-import streamlit as st
-from typing import List, Dict
-import os
-from abc import ABC, abstractmethod
-# Fix imports
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers.models.llama import LlamaConfig  # Correct import for LlamaConfig
 from transformers.utils import logging
-from transformers import BitsAndBytesConfig  # Added this import
 from peft import PeftModel, PeftConfig
 import torch
 import streamlit as st
@@ -28,40 +15,6 @@ class ModelHandler(ABC):
     @abstractmethod
     def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         pass
-
-class GPTHandler(ModelHandler):
-    def __init__(self):
-        try:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OpenAI API key not found in environment variables")
-            
-            self.client = ChatOpenAI(
-                api_key=api_key,
-                model="gpt-3.5-turbo"
-            )
-        except Exception as e:
-            st.error(f"Error initializing GPT handler: {str(e)}")
-            raise
-    
-    def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
-        try:
-            context = " ".join([
-                f"User: {item['user']} Bot: {item['bot']}" 
-                for item in chat_history[-3:]
-            ])
-            
-            messages = [
-                {"role": "system", "content": f"You are a {persona}. Respond accordingly."},
-                {"role": "user", "content": f"{context} {query}"}
-            ]
-            
-            response = self.client(messages)
-            return response.content
-            
-        except Exception as e:
-            st.error(f"Error with GPT: {str(e)}")
-            return "Sorry, I encountered an error. Please try again."
 
 class LlamaHandler(ModelHandler):
     def __init__(self):
@@ -87,51 +40,35 @@ class LlamaHandler(ModelHandler):
             
             # Create base config
             st.info("Setting up model configuration...")
-            from huggingface_hub import hf_hub_download
-            import json
-            
-            try:
-                config_file = hf_hub_download(
-                    repo_id=base_model_name,
-                    filename="config.json",
-                    token=os.getenv("HUGGINGFACE_TOKEN")
-                )
-                with open(config_file, 'r') as f:
-                    config_dict = json.load(f)
-                
-                # Create custom Llama config
-                config = LlamaConfig(
-                    vocab_size=config_dict.get('vocab_size', 32000),
-                    hidden_size=config_dict.get('hidden_size', 4096),
-                    intermediate_size=config_dict.get('intermediate_size', 11008),
-                    num_hidden_layers=config_dict.get('num_hidden_layers', 32),
-                    num_attention_heads=config_dict.get('num_attention_heads', 32),
-                    num_key_value_heads=config_dict.get('num_key_value_heads', 32),
-                    hidden_act=config_dict.get('hidden_act', 'silu'),
-                    max_position_embeddings=config_dict.get('max_position_embeddings', 4096),
-                    initializer_range=config_dict.get('initializer_range', 0.02),
-                    rms_norm_eps=config_dict.get('rms_norm_eps', 1e-6),
-                    use_cache=config_dict.get('use_cache', True),
-                    pad_token_id=config_dict.get('pad_token_id', 0),
-                    bos_token_id=config_dict.get('bos_token_id', 1),
-                    eos_token_id=config_dict.get('eos_token_id', 2),
-                    pretraining_tp=1,
-                    tie_word_embeddings=False,
-                    rope_scaling={
-                        "type": "linear",
-                        "factor": 2.0
-                    }
-                )
-                st.info("Successfully created model configuration")
-            except Exception as e:
-                st.warning(f"Could not create custom config: {str(e)}, proceeding with default config")
-                config = None
+            config = LlamaConfig(
+                vocab_size=32000,
+                hidden_size=4096,
+                intermediate_size=11008,
+                num_hidden_layers=32,
+                num_attention_heads=32,
+                num_key_value_heads=32,
+                hidden_act="silu",
+                max_position_embeddings=4096,
+                initializer_range=0.02,
+                rms_norm_eps=1e-6,
+                use_cache=True,
+                pad_token_id=0,
+                bos_token_id=1,
+                eos_token_id=2,
+                pretraining_tp=1,
+                tie_word_embeddings=False,
+                rope_scaling={
+                    "type": "linear",
+                    "factor": 2.0
+                }
+            )
+            st.info("Successfully created model configuration")
             
             # Load base model
             st.info(f"Loading base model from {base_model_name}...")
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
-                config=config if config is not None else None,
+                config=config,
                 quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
