@@ -1,8 +1,8 @@
 import os
 from abc import ABC, abstractmethod
 from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel, PeftConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer
+from huggingface_hub import login, list_repo_files, HfApi
 import torch
 import streamlit as st
 from typing import List, Dict
@@ -47,41 +47,86 @@ class GPTHandler(ModelHandler):
             return "Sorry, I encountered an error. Please try again."
 
 class LlamaHandler(ModelHandler):
+    def verify_model_access(self, base_model_path: str) -> bool:
+        """Verify access to the base model."""
+        try:
+            # Check for HF token
+            hf_token = os.getenv("HUGGINGFACE_TOKEN")
+            if not hf_token:
+                st.error("No Hugging Face token found in environment variables!")
+                st.info("Please set your Hugging Face token in the environment variables.")
+                return False
+            
+            # Try to login
+            st.info("Authenticating with Hugging Face...")
+            login(token=hf_token)
+            
+            # List files in the repository
+            st.info(f"Verifying access to {base_model_path}...")
+            files = list_repo_files(base_model_path)
+            
+            # Check if essential files are present
+            required_files = ["config.json", "tokenizer.json", "tokenizer_config.json"]
+            found_files = [f for f in files if f.split('/')[-1] in required_files]
+            
+            if not all(req in [f.split('/')[-1] for f in found_files] for req in required_files):
+                st.warning("Some required model files are missing!")
+                st.info("Files found: " + ", ".join(found_files))
+                return False
+            
+            st.success("Successfully verified model access!")
+            return True
+            
+        except Exception as e:
+            st.error("Error during model verification:")
+            st.error(str(e))
+            st.info("""
+            Common issues:
+            1. Missing or invalid Hugging Face token
+            2. No access to the Llama model (requires acceptance of Meta's license)
+            3. Network connectivity issues
+            
+            To fix:
+            1. Get your token from: https://huggingface.co/settings/tokens
+            2. Request access at: https://huggingface.co/meta-llama/Llama-2-7b-chat-hf
+            3. Accept the model's license agreement
+            """)
+            return False
+
     def __init__(self):
-        """Initialize the PEFT-adapted Llama model handler."""
+        """Initialize the Llama model handler."""
         try:
             st.info("Initializing Llama model... This may take a few moments.")
             
-            adapter_path = "meta-llama/Llama-2-7b-chat-hf"
+            # Model paths
+            adapter_model_path = "shashikumar1998/Llama-3.2-3B-Instruct"
+            base_model_path = "meta-llama/Llama-2-7b-chat-hf"
+            
+            # Verify base model access first
+            if not self.verify_model_access(base_model_path):
+                raise ValueError("Could not access the base model. Please check your Hugging Face token and model access.")
+            
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
-            # Load PEFT config to get base model
-            peft_config = PeftConfig.from_pretrained(adapter_path)
-            base_model_path = peft_config.base_model_name_or_path
-            
-            # Load tokenizer
+            # Load tokenizer from base model first
             st.info("Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(adapter_path)
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                base_model_path,
+                trust_remote_code=True,
+                use_fast=False
+            )
+            
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            # Load base model
-            st.info("Loading base model...")
-            base_model = AutoModelForCausalLM.from_pretrained(
-                base_model_path,
+            # Load model
+            st.info("Loading model...")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                adapter_model_path,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
                 low_cpu_mem_usage=True
-            )
-            
-            # Load adapter weights
-            st.info("Loading adapter weights...")
-            self.model = PeftModel.from_pretrained(
-                base_model,
-                adapter_path,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                device_map="auto"
             )
             
             # Generation parameters
@@ -93,6 +138,9 @@ class LlamaHandler(ModelHandler):
             
         except Exception as e:
             st.error(f"Error initializing Llama model: {str(e)}")
+            st.error("Detailed error information for debugging:")
+            st.error(f"Type: {type(e)}")
+            st.error(f"Args: {e.args}")
             raise
     
     def _format_prompt(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
