@@ -19,17 +19,7 @@ from typing import List, Dict
 # Disable unnecessary warnings
 logging.set_verbosity_error()
 
-import torch
-
-try:
-    if torch.cuda.is_available():
-        DEVICE = torch.device("cuda")
-    else:
-        raise RuntimeError("CUDA not available. Falling back to CPU.")
-except Exception as e:
-    print(f"INFO: {e}. Using CPU as the default device.")
-    DEVICE = torch.device("cpu")
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""  # Prevent CUDA initialization
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 
 # Initialize constants
