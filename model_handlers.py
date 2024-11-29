@@ -8,9 +8,27 @@ import torch
 import streamlit as st
 from typing import List, Dict
 from langchain_openai.chat_models import ChatOpenAI
+import os
+from abc import ABC, abstractmethod
+from unsloth import FastLanguageModel
+import cohere
+from pinecone import Pinecone
+from transformers import AutoTokenizer, AutoConfig, TextStreamer
+from typing import List, Dict
 
 # Disable unnecessary warnings
 logging.set_verbosity_error()
+
+
+# Initialize constants
+MAX_SEQ_LENGTH = 2048  # Sequence length for the model
+LOAD_IN_4BIT = True    # Enable 4-bit quantization
+DTYPE = None           # Auto-detect or specify float16, bfloat16, etc.
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
+
+# Initialize Cohere and Pinecone API keys
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
 class ModelHandler(ABC):
     @abstractmethod
@@ -53,161 +71,76 @@ class GPTHandler(ModelHandler):
 
 class LlamaHandler(ModelHandler):
     def __init__(self):
-        """Initialize the PEFT-adapted Llama model handler."""
         try:
-            st.info("Initializing model...")
-            
-            adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"
-            
-            # Load PEFT config
-            st.info("Loading PEFT configuration...")
-            peft_config = PeftConfig.from_pretrained(adapter_path)
-            base_model_name = peft_config.base_model_name_or_path
-            
-            # Set compute dtype
-            compute_dtype = torch.float16
-            
-            # Configure 4-bit quantization with updated settings
-            st.info("Setting up quantization configuration...")
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=compute_dtype,
-                bnb_4bit_use_double_quant=False,
-                llm_int8_threshold=6.0,
-                llm_int8_has_fp16_weight=False,
-                bnb_4bit_quant_storage="auto"
+            # Load the model and tokenizer
+            self.model_and_tokenizer = FastLanguageModel.from_pretrained(
+                model_name="shashikumar1998/Llama-3.2-3B-Instruct",
+                max_seq_length=MAX_SEQ_LENGTH,
+                dtype=DTYPE,
+                load_in_4bit=LOAD_IN_4BIT,
+                token=HF_TOKEN
             )
-            
-            # Create base config
-            st.info("Setting up model configuration...")
-            config = LlamaConfig(
-                vocab_size=32000,
-                hidden_size=4096,
-                intermediate_size=11008,
-                num_hidden_layers=32,
-                num_attention_heads=32,
-                num_key_value_heads=32,
-                hidden_act="silu",
-                max_position_embeddings=4096,
-                initializer_range=0.02,
-                rms_norm_eps=1e-6,
-                use_cache=True,
-                pad_token_id=0,
-                bos_token_id=1,
-                eos_token_id=2,
-                pretraining_tp=1,
-                tie_word_embeddings=False,
-                rope_scaling={
-                    "type": "linear",
-                    "factor": 2.0
-                }
-            )
-            st.info("Successfully created model configuration")
-            
-            # Load base model
-            st.info(f"Loading base model from {base_model_name}...")
-            base_model = AutoModelForCausalLM.from_pretrained(
-                base_model_name,
-                config=config,
-                quantization_config=bnb_config,
-                device_map="auto",
-                trust_remote_code=True,
-                token=os.getenv("HUGGINGFACE_TOKEN")
-            )
-            
-            # Load adapter weights
-            st.info("Loading adapter weights...")
-            self.model = PeftModel.from_pretrained(
-                base_model,
-                adapter_path,
-                token=os.getenv("HUGGINGFACE_TOKEN"),
-                device_map="auto"
-            )
-            
-            # Load tokenizer
-            st.info("Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                base_model_name,
-                trust_remote_code=True,
-                token=os.getenv("HUGGINGFACE_TOKEN")
-            )
-            
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            # Set generation parameters
-            self.max_length = 512
-            self.temperature = 0.7
-            self.top_p = 0.95
-            
-            st.success("Model initialized successfully!")
-            
+
+            if isinstance(self.model_and_tokenizer, tuple):
+                self.model = self.model_and_tokenizer[0]
+                self.tokenizer = self.model_and_tokenizer[1]
+            else:
+                self.model = self.model_and_tokenizer
+                self.tokenizer = None  # Adjust based on library response
+
+            # Initialize Cohere and Pinecone
+            self.cohere_client = cohere.Client(COHERE_API_KEY)
+            self.pc = Pinecone(api_key=PINECONE_API_KEY)
+            self.index = self.pc.Index("cohere-pinecone-tree")
+
+            print("Model, Cohere, and Pinecone initialized successfully!")
+
         except Exception as e:
-            st.error(f"Error initializing model: {str(e)}")
-            st.error(f"Error type: {type(e)}")
-            st.error(f"Base model name: {base_model_name}")
+            print(f"Error initializing FastLanguageModelHandler: {e}")
             raise
 
-    def generate_response(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
-        """Generate a response using the model."""
+    def generate_rag_response(self, query: str) -> str:
         try:
-            # Format prompt
-            system_prompt = f"You are a {persona}. Be helpful and concise."
-            
-            # Include only last 2 interactions for context
-            recent_history = chat_history[-2:] if chat_history else []
-            history_text = "\n".join([
-                f"User: {chat['user']}\nAssistant: {chat['bot']}"
-                for chat in recent_history
-            ])
-            
-            # Create full prompt
-            prompt = f"""<s>[INST] {system_prompt}
+            # Step 1: Generate query embedding using Cohere
+            response = self.cohere_client.embed(texts=[query], model="embed-english-light-v2.0")
+            query_embedding = response.embeddings[0]
 
-Previous conversation:
-{history_text}
+            # Step 2: Retrieve relevant documents from Pinecone
+            top_k = 5  # Number of documents to retrieve
+            results = self.index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
+            retrieved_context = "\n".join([result["metadata"]["text"] for result in results["matches"]])
 
-User: {user_input} [/INST]"""
-
-            # Tokenize input
-            inputs = self.tokenizer(
-                prompt,
+            # Step 3: Prepare input for the model
+            messages = [
+                {"role": "system", "content": f"Here is some context to help answer the question: {retrieved_context}"},
+                {"role": "user", "content": query},
+            ]
+            inputs = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
                 return_tensors="pt",
-                truncation=True,
-                max_length=self.max_length,
-                padding=True
-            ).to(self.model.device)
+            ).to("cuda")
 
-            # Generate response
-            with torch.no_grad():
-                generated_ids = self.model.generate(
-                    inputs.input_ids,
-                    max_length=self.max_length,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.pad_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id,
-                    num_return_sequences=1
-                )
-                
-                response = self.tokenizer.decode(
-                    generated_ids[0],
-                    skip_special_tokens=True,
-                    clean_up_tokenization_spaces=True
-                )
-            
-            # Clean up response
-            if "[/INST]" in response:
-                response = response.split("[/INST]")[-1].strip()
-            
-            # Truncate if too long
-            if len(response) > 1000:
-                response = response[:1000] + "..."
-            
-            return response
-            
+            # Step 4: Generate response using the model
+            outputs = self.model.generate(
+                input_ids=inputs,
+                max_new_tokens=64,
+                use_cache=True,
+                temperature=0.5,
+                min_p=0.1,
+            )
+            text_streamer = TextStreamer(self.tokenizer, skip_prompt=True)
+            response_text = self.model.generate(
+                input_ids=inputs,
+                streamer=text_streamer,
+                use_cache=True,
+                temperature=0.5,
+                min_p=0.1
+            )
+
+            return response_text
+
         except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
-            return "I apologize, but I encountered an error. Please try again."
+            print(f"Error generating RAG response: {e}")
+            return "I encountered an error. Please try again."
