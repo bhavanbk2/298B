@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 import torch
 import streamlit as st
 from typing import List, Dict
@@ -55,20 +55,34 @@ class LlamaHandler(ModelHandler):
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
+            # Load config first and modify RoPE scaling
+            config = AutoConfig.from_pretrained(
+                model_path,
+                trust_remote_code=True
+            )
+            # Override the RoPE scaling to match expected format
+            config.rope_scaling = {
+                "type": "linear",
+                "factor": 8.0
+            }
+            
             # Load tokenizer
             st.info("Loading tokenizer...")
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_path,
+                trust_remote_code=True,
                 use_fast=False
             )
             
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            # Load model
+            # Load model with modified config
             st.info("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
+                config=config,
+                trust_remote_code=True,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
                 low_cpu_mem_usage=True
