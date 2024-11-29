@@ -91,15 +91,15 @@ class LlamaHandler(ModelHandler):
                 self.model = self.model_and_tokenizer
                 self.tokenizer = None  # Adjust based on library response
 
-            # Move model to the detected device (CPU/GPU)
-            self.model.to(DEVICE)
+            # Log CPU usage
+            print("Using CPU for model initialization.")
 
             # Initialize Cohere and Pinecone
             self.cohere_client = cohere.Client(COHERE_API_KEY)
             self.pc = Pinecone(api_key=PINECONE_API_KEY)
             self.index = self.pc.Index("cohere-pinecone-tree")
 
-            print(f"Model initialized successfully on device: {DEVICE}")
+            print("Model initialized successfully on CPU.")
 
         except Exception as e:
             print(f"Error initializing FastLanguageModelHandler: {e}")
@@ -126,7 +126,7 @@ class LlamaHandler(ModelHandler):
                 tokenize=True,
                 add_generation_prompt=True,
                 return_tensors="pt",
-            ).to(DEVICE)
+            )  # Skip .to(DEVICE) since CPU is default
 
             # Step 4: Generate response using the model
             outputs = self.model.generate(
