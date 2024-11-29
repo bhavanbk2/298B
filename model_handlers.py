@@ -86,9 +86,9 @@ class LlamaHandler(ModelHandler):
                 old_rope_scaling = config.rope_scaling
                 st.info(f"Original RoPE scaling: {json.dumps(old_rope_scaling, indent=2)}")
                 
-                # Convert to required format
+                # Modify rope_scaling to match expected format
                 config.rope_scaling = {
-                    "type": "dynamic",  # or "linear" based on your needs
+                    "type": "dynamic",  # Adjust this based on your model's requirements
                     "factor": old_rope_scaling.get('factor', 2.0)
                 }
                 st.info(f"Modified RoPE scaling: {json.dumps(config.rope_scaling, indent=2)}")
@@ -208,3 +208,4 @@ User: {user_input} [/INST]"""
         except Exception as e:
             st.error(f"Error generating response: {str(e)}")
             return "I apologize, but I encountered an error. Please try again."
+
