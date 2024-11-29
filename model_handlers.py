@@ -1,7 +1,8 @@
 import os
 from abc import ABC, abstractmethod
 from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel, PeftConfig
 import torch
 import streamlit as st
 from typing import List, Dict
@@ -47,45 +48,40 @@ class GPTHandler(ModelHandler):
 
 class LlamaHandler(ModelHandler):
     def __init__(self):
-        """Initialize the Llama model handler."""
+        """Initialize the PEFT-adapted Llama model handler."""
         try:
             st.info("Initializing Llama model... This may take a few moments.")
             
-            model_path = "sainathv02/llama3_1_insurance_qlora"
+            adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
-            # Load config first and modify RoPE scaling
-            config = AutoConfig.from_pretrained(
-                model_path,
-                trust_remote_code=True
-            )
-            # Override the RoPE scaling to match expected format
-            config.rope_scaling = {
-                "type": "linear",
-                "factor": 8.0
-            }
+            # Load PEFT config to get base model
+            peft_config = PeftConfig.from_pretrained(adapter_path)
+            base_model_path = peft_config.base_model_name_or_path
             
             # Load tokenizer
             st.info("Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                model_path,
-                trust_remote_code=True,
-                use_fast=False
-            )
-            
+            self.tokenizer = AutoTokenizer.from_pretrained(adapter_path)
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            # Load model with modified config
-            st.info("Loading model...")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                config=config,
-                trust_remote_code=True,
+            # Load base model
+            st.info("Loading base model...")
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_path,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
                 low_cpu_mem_usage=True
+            )
+            
+            # Load adapter weights
+            st.info("Loading adapter weights...")
+            self.model = PeftModel.from_pretrained(
+                base_model,
+                adapter_path,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device_map="auto"
             )
             
             # Generation parameters
@@ -101,8 +97,7 @@ class LlamaHandler(ModelHandler):
     
     def _format_prompt(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         """Format the input prompt."""
-        # Simplified prompt template for insurance-specific model
-        system_prompt = f"You are a {persona} specializing in insurance. Be helpful and concise."
+        system_prompt = f"You are a {persona}. Be helpful and concise."
         
         # Include only last 2 interactions for context
         recent_history = chat_history[-2:] if chat_history else []
