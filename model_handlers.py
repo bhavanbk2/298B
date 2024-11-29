@@ -12,11 +12,18 @@ import streamlit as st
 from typing import List, Dict
 import os
 from abc import ABC, abstractmethod
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+# Fix imports
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.utils import logging
+from transformers import BitsAndBytesConfig  # Added this import
 from peft import PeftModel, PeftConfig
 import torch
 import streamlit as st
 from typing import List, Dict
+
+# Disable unnecessary warnings
+logging.set_verbosity_error()
+
 
 class ModelHandler(ABC):
     @abstractmethod
@@ -56,6 +63,7 @@ class GPTHandler(ModelHandler):
         except Exception as e:
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
+
 
 class LlamaHandler(ModelHandler):
     def __init__(self):
