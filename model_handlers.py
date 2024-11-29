@@ -65,6 +65,24 @@ class GPTHandler(ModelHandler):
             return "Sorry, I encountered an error. Please try again."
 
 
+import os
+from abc import ABC, abstractmethod
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, AutoConfig
+from transformers.utils import logging
+from peft import PeftModel, PeftConfig
+import torch
+import streamlit as st
+from typing import List, Dict
+import json
+
+# Disable unnecessary warnings
+logging.set_verbosity_error()
+
+class ModelHandler(ABC):
+    @abstractmethod
+    def generate_response(self, query: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
+        pass
+
 class LlamaHandler(ModelHandler):
     def __init__(self):
         """Initialize the PEFT-adapted Llama model handler."""
@@ -78,6 +96,22 @@ class LlamaHandler(ModelHandler):
             peft_config = PeftConfig.from_pretrained(adapter_path)
             base_model_name = peft_config.base_model_name_or_path
             
+            # Load and modify base model config
+            st.info("Setting up model configuration...")
+            config = AutoConfig.from_pretrained(base_model_name, trust_remote_code=True)
+            
+            # Fix RoPE scaling configuration
+            if hasattr(config, 'rope_scaling'):
+                old_rope_scaling = config.rope_scaling
+                st.info(f"Original RoPE scaling: {json.dumps(old_rope_scaling, indent=2)}")
+                
+                # Convert to required format
+                config.rope_scaling = {
+                    "type": "dynamic",  # or "linear" based on your needs
+                    "factor": old_rope_scaling.get('factor', 2.0)
+                }
+                st.info(f"Modified RoPE scaling: {json.dumps(config.rope_scaling, indent=2)}")
+            
             # Configure 4-bit quantization
             st.info("Setting up quantization configuration...")
             bnb_config = BitsAndBytesConfig(
@@ -87,10 +121,11 @@ class LlamaHandler(ModelHandler):
                 bnb_4bit_use_double_quant=False
             )
             
-            # Load base model with quantization
+            # Load base model with modified config and quantization
             st.info(f"Loading base model from {base_model_name}...")
             base_model = AutoModelForCausalLM.from_pretrained(
                 base_model_name,
+                config=config,
                 quantization_config=bnb_config,
                 device_map="auto",
                 trust_remote_code=True,
