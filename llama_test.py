@@ -1,6 +1,7 @@
 import requests
 import streamlit as st
 from typing import List, Dict
+import json
 
 class LlamaAPIHandler:
     def __init__(self):
@@ -25,13 +26,21 @@ class LlamaAPIHandler:
     def query_api(self, prompt: str) -> str:
         """Send a query to the Hugging Face API."""
         try:
-            # Simplified payload structure
+            # Basic payload structure for text generation
             payload = {
                 "inputs": prompt,
-                "options": {
-                    "wait_for_model": True
+                "parameters": {
+                    "max_new_tokens": 256,
+                    "temperature": 0.7,
+                    "top_p": 0.95,
+                    "do_sample": True,
+                    "return_full_text": False
                 }
             }
+            
+            # Debug payload
+            st.write("Sending payload:")
+            st.write(payload)
             
             # Send request to API
             with st.spinner("Generating response..."):
@@ -42,37 +51,38 @@ class LlamaAPIHandler:
                     timeout=30
                 )
             
-            # Debug information
-            st.write(f"Status Code: {response.status_code}")
+            # Debug response
+            st.write(f"Response Status: {response.status_code}")
+            st.write("Response Content:")
+            st.write(response.text)
             
             # Check response
             if response.status_code == 200:
-                result = response.json()
-                if isinstance(result, list) and len(result) > 0:
-                    generated_text = result[0].get('generated_text', '')
-                    # If the response contains the full prompt, extract only the new content
-                    if prompt in generated_text:
-                        generated_text = generated_text[len(prompt):].strip()
-                    return generated_text
-                return str(result)
+                response_data = response.json()
+                st.write("Parsed Response:")
+                st.write(response_data)
+                
+                if isinstance(response_data, list) and len(response_data) > 0:
+                    return response_data[0].get('generated_text', '')
+                return str(response_data)
             else:
-                st.error(f"API Error: {response.status_code}")
-                st.error(f"Response content: {response.text}")
-                return f"Error: Unable to generate response. Please try again."
+                error_msg = f"API Error {response.status_code}: {response.text}"
+                st.error(error_msg)
+                return error_msg
                 
         except requests.exceptions.Timeout:
             st.error("Request timed out. The server might be busy.")
             return "I apologize, but the request timed out. Please try again."
             
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             st.error(f"API request failed: {str(e)}")
             return "I apologize, but I encountered an error communicating with the API."
 
     def generate_response(self, user_input: str, persona: str, chat_history: List[Dict[str, str]]) -> str:
         """Generate a response using the API."""
         try:
-            # Format prompt
-            prompt = f"You are a {persona}. The user says: {user_input}\nAssistant:"
+            # Format prompt - simplified version
+            prompt = f"<s>[INST] Act as {persona}. {user_input} [/INST]"
             
             # Get response from API
             response = self.query_api(prompt)
@@ -99,15 +109,18 @@ def main():
     if 'model_handler' not in st.session_state:
         st.session_state.model_handler = None
     
-    # Sidebar for settings
+    # Sidebar
     with st.sidebar:
         st.markdown("### 🛠️ Settings")
         persona = st.selectbox(
             "Choose Assistant Persona",
             ["Helpful Assistant", "Technical Expert", "Creative Writer"]
         )
+        
+        # Add debug toggle
+        st.session_state.debug = st.checkbox("Show Debug Info", value=False)
     
-    # Initialize model handler if not already done
+    # Initialize model handler
     if st.session_state.model_handler is None:
         try:
             st.session_state.model_handler = LlamaAPIHandler()
@@ -140,13 +153,9 @@ def main():
     # Display chat history
     st.markdown("### Chat History")
     for chat in st.session_state.chat_history:
-        # User message with emoji
         st.markdown(f"👤 **You:** {chat['user']}")
-        
-        # Bot response with emoji
         if chat['bot']:
             st.markdown(f"🤖 **Assistant:** {chat['bot']}")
-        
         st.markdown("---")
 
 if __name__ == "__main__":
