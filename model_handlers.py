@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from langchain_openai.chat_models import ChatOpenAI
-from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import streamlit as st
 from typing import List, Dict
@@ -52,56 +52,23 @@ class LlamaHandler(ModelHandler):
             st.info("Initializing Llama model... This may take a few moments.")
             
             model_path = "sainathv02/llama3_1_insurance_qlora"
-            base_model_path = "meta-llama/Llama-2-7b-chat-hf"
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             st.info(f"Using device: {self.device}")
             
-            # Create base Llama configuration
-            config = LlamaConfig(
-                vocab_size=32000,
-                hidden_size=4096,
-                intermediate_size=11008,
-                num_hidden_layers=32,
-                num_attention_heads=32,
-                num_key_value_heads=32,
-                hidden_act="silu",
-                max_position_embeddings=4096,
-                initializer_range=0.02,
-                rms_norm_eps=1e-6,
-                use_cache=True,
-                pad_token_id=0,
-                bos_token_id=1,
-                eos_token_id=2,
-                pretraining_tp=1,
-                tie_word_embeddings=False,
-                rope_scaling={"type": "dynamic", "factor": 2.0}
-            )
-            
             # Load tokenizer
             st.info("Loading tokenizer...")
-            try:
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    model_path,
-                    trust_remote_code=True,
-                    use_fast=False
-                )
-            except Exception as e:
-                st.warning(f"Failed to load custom tokenizer, falling back to base model tokenizer: {str(e)}")
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    base_model_path,
-                    trust_remote_code=True,
-                    use_fast=False
-                )
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_path,
+                use_fast=False
+            )
             
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
             
-            # Load model with configuration
+            # Load model
             st.info("Loading model...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_path,
-                config=config,
-                trust_remote_code=True,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 device_map="auto",
                 low_cpu_mem_usage=True
