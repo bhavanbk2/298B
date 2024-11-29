@@ -10,6 +10,13 @@ from transformers import (
 import torch
 import streamlit as st
 from typing import List, Dict
+import os
+from abc import ABC, abstractmethod
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel, PeftConfig
+import torch
+import streamlit as st
+from typing import List, Dict
 
 class ModelHandler(ABC):
     @abstractmethod
@@ -50,51 +57,48 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
-
-
 class LlamaHandler(ModelHandler):
     def __init__(self):
-        """Initialize the Llama model handler."""
+        """Initialize the PEFT-adapted Llama model handler."""
         try:
             st.info("Initializing model...")
             
-            model_path = "shashikumar1998/Llama-3.2-3B-Instruct"
+            adapter_path = "shashikumar1998/Llama-3.2-3B-Instruct"
             
-            # Create configuration with proper RoPE settings
-            st.info("Setting up configuration...")
-            config = AutoConfig.from_pretrained(
-                model_path,
-                trust_remote_code=True
-            )
+            # Load PEFT config first to get base model name
+            st.info("Loading PEFT configuration...")
+            peft_config = PeftConfig.from_pretrained(adapter_path)
+            base_model_name = peft_config.base_model_name_or_path
             
-            # Override RoPE scaling with correct format
-            config.rope_scaling = {
-                "type": "linear",
-                "factor": 2.0
-            }
-            
-            # Load tokenizer
-            st.info("Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                model_path,
-                use_fast=False,
-                trust_remote_code=True
-            )
-            
-            # Ensure padding token is set
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            # Load model with modified config
-            st.info("Loading model...")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                config=config,
+            # Load base model
+            st.info(f"Loading base model from {base_model_name}...")
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
                 torch_dtype=torch.float16,
                 device_map="auto",
                 trust_remote_code=True,
                 low_cpu_mem_usage=True
             )
+            
+            # Load adapter weights
+            st.info("Loading adapter weights...")
+            self.model = PeftModel.from_pretrained(
+                base_model,
+                adapter_path,
+                torch_dtype=torch.float16,
+                device_map="auto"
+            )
+            
+            # Load tokenizer from base model
+            st.info("Loading tokenizer...")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                base_model_name,
+                trust_remote_code=True,
+                use_fast=False
+            )
+            
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
             
             # Set generation parameters
             self.max_length = 512
