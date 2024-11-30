@@ -31,7 +31,7 @@ class GPTHandler(ModelHandler):
             ])
             
             messages = [
-                {"role": "system", "content": f"You are {persona}. Respond accordingly."},
+                {"role": "system", "content": f"You are {persona}. Remember you are not to respond outside the core competency of the {persona}, but still be able to respond any basic queries. Make sure to impart the {persona} and respond like how the person does respond to each and every differnent question in a unique way. Respond accordingly."},
                 {"role": "user", "content": f"{context} {query}"}
             ]
             
