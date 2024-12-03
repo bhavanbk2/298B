@@ -81,7 +81,7 @@ def load_image(image_path):
     return None
 
 def main():
-    st.set_page_config(page_title="AI Chat Assistant with Images", layout="wide")
+    st.set_page_config(page_title="AI Persona-based Chat Assistant", layout="wide")
 
     # Sidebar
     with st.sidebar:
