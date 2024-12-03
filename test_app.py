@@ -157,7 +157,7 @@ def main():
             
             # Bot Message with Image
             st.markdown("<div class='chat-item'>", unsafe_allow_html=True)
-            st.image("images/bot_image.png", width=40, caption="Assistant")
+            st.image("images/bot_image.png", width=40, caption="Bot")
             st.markdown(f"<div class='chat-text'>{chat['bot']}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
             
