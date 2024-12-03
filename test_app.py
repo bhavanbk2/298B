@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from model_handlers import GPTHandler, LlamaHandler, GemmaHandler, PalmHandler
 import time
 import warnings
+from PIL import Image
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -32,6 +33,41 @@ def apply_custom_css(theme):
     .stApp {{
         background-color: {primary_color};
     }}
+    .chat-bubble {{
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        max-width: 75%;
+    }}
+    .chat-container {{
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 400px;
+        overflow-y: auto;
+        padding-right: 10px;
+    }}
+    .chat-item {{
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 10px;
+    }}
+    .chat-avatar {{
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        margin-right: 10px;
+    }}
+    .chat-text {{
+        background-color: #F1F0F0;
+        padding: 10px;
+        border-radius: 10px;
+        max-width: 70%;
+        color: black;
+    }}
+    .chat-text-user {{
+        background-color: #DCF8C6;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -40,20 +76,8 @@ def typing_animation():
     with st.spinner("Assistant is typing..."):
         time.sleep(1)
 
-def export_chat_history():
-    """Export chat history as a .txt file."""
-    history = "\n\n".join(
-        [f"User: {chat['user']}\nAssistant: {chat['bot']}" for chat in st.session_state.chat_history]
-    )
-    st.download_button(
-        label="📥 Download Chat History",
-        data=history,
-        file_name="chat_history.txt",
-        mime="text/plain"
-    )
-
 def main():
-    st.set_page_config(page_title="AI Chat Assistant", layout="wide")
+    st.set_page_config(page_title="AI Chat Assistant with Images", layout="wide")
 
     # Sidebar
     with st.sidebar:
@@ -83,7 +107,7 @@ def main():
     apply_custom_css(theme)
 
     # Main content
-    st.title("💬 Persona-Based Conversational Bot")
+    st.title("💬 Persona-Based Conversational Bot with Images")
     st.markdown(f"Ask your question to **{st.session_state.persona}**.")
     
     # Initialize model handler if not exists or model changed
@@ -111,6 +135,7 @@ def main():
                 response = st.session_state.model_handler.generate_response(
                     user_input, st.session_state.persona, st.session_state.chat_history
                 )
+
                 st.session_state.chat_history.append({
                     'user': user_input,
                     'bot': response
@@ -121,10 +146,22 @@ def main():
     # Display chat history
     if st.session_state.chat_history:
         for chat in st.session_state.chat_history:
-            st.markdown(f"**User:** {chat['user']}")
-            st.markdown(f"**Assistant:** {chat['bot']}")
-            st.markdown("---")
-        export_chat_history()
+            st.markdown(
+                f"""
+                <div class="chat-item">
+                    <img src="images/user_image.png" class="chat-avatar">
+                    <div class="chat-text chat-text-user">{chat['user']}</div>
+                </div>
+                """, unsafe_allow_html=True
+            )
+            st.markdown(
+                f"""
+                <div class="chat-item">
+                    <img src="images/bot_image.png" class="chat-avatar">
+                    <div class="chat-text">{chat['bot']}</div>
+                </div>
+                """, unsafe_allow_html=True
+            )
     else:
         st.markdown("<p style='color: #6c757d;'>Start a conversation!</p>", unsafe_allow_html=True)
 
