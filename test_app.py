@@ -81,7 +81,7 @@ def load_image(image_path):
     return None
 
 def main():
-    st.set_page_config(page_title="AI Persona-based Chat Assistant", layout="wide")
+    st.set_page_config(page_title="AI Chat Assistant with Images", layout="wide")
 
     # Sidebar
     with st.sidebar:
@@ -111,7 +111,7 @@ def main():
     apply_custom_css(theme)
 
     # Main content
-    st.title("💬 Persona-Based Conversational Bot with Images")
+    st.title("💬 Persona-Based Conversational Bot")
     st.markdown(f"Ask your question to **{st.session_state.persona}**.")
     
     # Initialize model handler if not exists or model changed
@@ -150,23 +150,19 @@ def main():
     if st.session_state.chat_history:
         for chat in st.session_state.chat_history:
             # User Message with Image
-            st.markdown(
-                f"""
-                <div class="chat-item">
-                    <img src="images/user_image.png" class="chat-avatar">
-                    <div class="chat-text chat-text-user">{chat['user']}</div>
-                </div>
-                """, unsafe_allow_html=True
-            )
+            st.markdown("<div class='chat-item'>", unsafe_allow_html=True)
+            st.image("images/user_image.png", width=40, caption="User")
+            st.markdown(f"<div class='chat-text chat-text-user'>{chat['user']}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            
             # Bot Message with Image
-            st.markdown(
-                f"""
-                <div class="chat-item">
-                    <img src="images/bot_image.png" class="chat-avatar">
-                    <div class="chat-text">{chat['bot']}</div>
-                </div>
-                """, unsafe_allow_html=True
-            )
+            st.markdown("<div class='chat-item'>", unsafe_allow_html=True)
+            st.image("images/bot_image.png", width=40, caption="Assistant")
+            st.markdown(f"<div class='chat-text'>{chat['bot']}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+        # Export Chat History Button
+        export_chat_history()
     else:
         st.markdown("<p style='color: #6c757d;'>Start a conversation!</p>", unsafe_allow_html=True)
 
