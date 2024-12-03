@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from model_handlers import GPTHandler, LlamaHandler, GemmaHandler, PalmHandler
 import time
 import warnings
+from PIL import Image
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -32,6 +33,27 @@ def apply_custom_css(theme):
     .stApp {{
         background-color: {primary_color};
     }}
+    .chat-item {{
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 10px;
+    }}
+    .chat-avatar {{
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        margin-right: 10px;
+    }}
+    .chat-text {{
+        background-color: #F1F0F0;
+        padding: 10px;
+        border-radius: 10px;
+        max-width: 70%;
+        color: black;
+    }}
+    .chat-text-user {{
+        background-color: #DCF8C6;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -52,8 +74,14 @@ def export_chat_history():
         mime="text/plain"
     )
 
+def load_image(image_path):
+    """Load and return an image."""
+    if os.path.exists(image_path):
+        return Image.open(image_path)
+    return None
+
 def main():
-    st.set_page_config(page_title="AI Chat Assistant", layout="wide")
+    st.set_page_config(page_title="AI Chat Assistant with Images", layout="wide")
 
     # Sidebar
     with st.sidebar:
@@ -83,7 +111,7 @@ def main():
     apply_custom_css(theme)
 
     # Main content
-    st.title("💬 Persona-Based Conversational Bot")
+    st.title("💬 Persona-Based Conversational Bot with Images")
     st.markdown(f"Ask your question to **{st.session_state.persona}**.")
     
     # Initialize model handler if not exists or model changed
@@ -121,10 +149,24 @@ def main():
     # Display chat history
     if st.session_state.chat_history:
         for chat in st.session_state.chat_history:
-            st.markdown(f"**User:** {chat['user']}")
-            st.markdown(f"**Assistant:** {chat['bot']}")
-            st.markdown("---")
-        export_chat_history()
+            # User Message with Image
+            st.markdown(
+                f"""
+                <div class="chat-item">
+                    <img src="images/user_image.png" class="chat-avatar">
+                    <div class="chat-text chat-text-user">{chat['user']}</div>
+                </div>
+                """, unsafe_allow_html=True
+            )
+            # Bot Message with Image
+            st.markdown(
+                f"""
+                <div class="chat-item">
+                    <img src="images/bot_image.png" class="chat-avatar">
+                    <div class="chat-text">{chat['bot']}</div>
+                </div>
+                """, unsafe_allow_html=True
+            )
     else:
         st.markdown("<p style='color: #6c757d;'>Start a conversation!</p>", unsafe_allow_html=True)
 
