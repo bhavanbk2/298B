@@ -100,7 +100,7 @@ def main():
         st.markdown("### 🤖 Choose AI Model")
         model_choice = st.selectbox(
             "Select Model",
-            ["GPT-3.5", "Llama", "Gemma", "Palm"],
+            ["GPT", "Llama", "Gemma", "Palm"],
             help="Choose your preferred AI model"
         )
 
@@ -115,7 +115,7 @@ def main():
     st.markdown(f"Ask your question to **{st.session_state.persona}**.")
     
     # Initialize model handler if not exists or model changed
-    if model_choice == "GPT-3.5":
+    if model_choice == "GPT":
         if not isinstance(st.session_state.model_handler, GPTHandler):
             st.session_state.model_handler = GPTHandler()
     elif model_choice == "Llama":
