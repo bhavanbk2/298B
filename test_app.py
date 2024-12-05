@@ -45,8 +45,10 @@ def load_image(image_path):
 def main():
     st.set_page_config(page_title="AI Chat Assistant", layout="wide")
 
-    # Load images for user and bot
+    # Load images for user and personas
     user_image = load_image("images/user_image.png")
+    sanjay_image = load_image("images/sanjay-gupta-web.jpg")
+    robert_image = load_image("images/0_76OmPaOr7EfnSjXy.png")
     bot_image = load_image("images/bot_image.png")
 
     # Sidebar
@@ -85,6 +87,13 @@ def main():
                 st.session_state.model_handler = PalmHandler()
             st.success(f"{new_model_choice} model loaded successfully!")
 
+    # Select bot image based on persona
+    persona_image = bot_image
+    if st.session_state.persona == "Sanjay Gupta":
+        persona_image = sanjay_image
+    elif st.session_state.persona == "Robert Kiyosaki":
+        persona_image = robert_image
+
     # Main content
     st.title("💬 Persona-Based Conversational Bot")
     st.markdown(f"Ask your question to **{st.session_state.persona}**.")
@@ -113,16 +122,16 @@ def main():
             # User Message with Image
             col1, col2 = st.columns([1, 9])
             with col1:
-                st.image(user_image, width=40, caption="You")
+                st.image(user_image, width=50)
             with col2:
-                st.markdown(f"**{chat['user']}**")
+                st.markdown(f"{chat['user']}")
             
-            # Bot Message with Image
+            # Bot Message with Persona Image
             col1, col2 = st.columns([1, 9])
             with col1:
-                st.image(bot_image, width=40, caption=st.session_state.persona)
+                st.image(persona_image, width=50)
             with col2:
-                st.markdown(f"**{chat['bot']}**")
+                st.markdown(f"{chat['bot']}")
             st.markdown("---")
         
         # Export Chat History Button
