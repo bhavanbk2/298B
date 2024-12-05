@@ -50,7 +50,7 @@ class LlamaHandler(ModelHandler):
             self.headers = {
                 "Authorization": llama_key,
                 "Content-Type": "application/json"
-            }self. initialized = True
+            } self. initialized = True
         except Exception:
             self.initialized = False
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
