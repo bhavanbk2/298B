@@ -26,7 +26,7 @@ def apply_theme_based_on_browser():
     (function() {
         const isDarkMode = window.matchMedia("(prefers-color-scheme: dark)").matches;
         const themeColor = isDarkMode ? "Dark" : "Light";
-        window.parent.document.body.setAttribute("data-theme", themeColor);
+        document.body.setAttribute("data-theme", themeColor);
     })();
     </script>
     """
@@ -105,8 +105,8 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        if st.button("📝 New Chat", key="new_chat"):
-            if confirm_clear_chat_history(key="new_chat_confirm"):
+        if st.button("📝 New Chat", key="new_chat_button"):
+            if confirm_clear_chat_history(key="confirm_new_chat"):
                 st.session_state.chat_history.clear()
                 st.session_state.model_handler = None
                 st.success("Chat history cleared successfully!")
@@ -118,7 +118,7 @@ def main():
             help="Choose the assistant's persona"
         )
         if new_persona != st.session_state.persona:
-            if confirm_clear_chat_history(key="persona_change"):
+            if confirm_clear_chat_history(key="confirm_persona_change"):
                 st.session_state.chat_history.clear()
                 st.session_state.persona = new_persona
                 st.success(f"Persona updated to {new_persona}!")
@@ -130,7 +130,7 @@ def main():
             help="Choose your preferred AI model"
         )
         if st.session_state.model_handler is None or type(st.session_state.model_handler).__name__ != f"{new_model_choice}Handler":
-            if confirm_clear_chat_history(key="model_change"):
+            if confirm_clear_chat_history(key="confirm_model_change"):
                 st.session_state.chat_history.clear()
                 if new_model_choice == "GPT":
                     st.session_state.model_handler = GPTHandler()
@@ -140,7 +140,7 @@ def main():
                     st.session_state.model_handler = GemmaHandler()
                 elif new_model_choice == "Palm":
                     st.session_state.model_handler = PalmHandler()
-                st.success(f"Model switched to {new_model_choice}!")
+                st.success(f"{new_model_choice} model loaded successfully!")
 
     # Main content
     st.title("💬 Persona-Based Conversational Bot")
@@ -149,7 +149,7 @@ def main():
     # Chat interface
     user_input = st.text_input("Your message:", key="user_input", placeholder="Type your question here...")
     
-    if st.button("Send", key="send_message"):
+    if st.button("Send", key="send_button"):
         if user_input:
             typing_animation()
             try:
@@ -166,7 +166,7 @@ def main():
     
     # Display chat history
     if st.session_state.chat_history:
-        for chat in st.session_state.chat_history:
+        for i, chat in enumerate(st.session_state.chat_history):
             # User Message with Image
             st.markdown("<div class='chat-item'>", unsafe_allow_html=True)
             st.image("images/user_image.png", width=40, caption="User")
