@@ -1,20 +1,27 @@
 import os
+import requests
 from abc import ABC, abstractmethod
-from langchain_openai.chat_models import ChatOpenAI
 import streamlit as st
+from langchain_openai.chat_models import ChatOpenAI
+
 
 class ModelHandler(ABC):
     @abstractmethod
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         pass
-class BaseHandler:
+
+
+class BaseHandler(ModelHandler):
     def __init__(self):
+        """Initialize the GPT fallback handler."""
         self.gpt_handler = GPTHandler()
 
     def fallback_to_gpt(self, query, persona, chat_history):
+        """Fallback to GPT handler."""
         return self.gpt_handler.generate_response(query, persona, chat_history)
 
-class GPTHandler(BaseHandler):
+
+class GPTHandler(ModelHandler):
     def __init__(self):
         try:
             api_key = os.getenv("OPENAI_API_KEY")
@@ -37,7 +44,7 @@ class GPTHandler(BaseHandler):
             ])
             
             messages = [
-                {"role": "system", "content": f"You are {persona}. Remember you are not to respond outside the core competency of the {persona}, but still be able to respond any basic queries. Make sure to impart the {persona} and respond like how the person does respond to each and every differnent question in a unique way. Respond accordingly."},
+                {"role": "system", "content": f"You are {persona}. Respond uniquely and provide accurate assistance."},
                 {"role": "user", "content": f"{context} {query}"}
             ]
             
@@ -47,100 +54,104 @@ class GPTHandler(BaseHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
+
 class LlamaHandler(BaseHandler):
     def __init__(self):
+        super().__init__()
         try:
             st.info("Initializing Llama handler...")
-            # configuration for Llama API
             self.api_url = "https://api-inference.huggingface.co/models/llama-model"
             self.headers = {
-                "Authorization": llama_key,
+                "Authorization": f"Bearer {os.getenv('LLAMA_API_KEY')}",
                 "Content-Type": "application/json"
-            } 
+            }
             self.initialized = True
-        except Exception:
+        except Exception as e:
             self.initialized = False
+            st.error(f"Failed to initialize LlamaHandler: {e}")
+
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         if not self.initialized:
-            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt(query, persona, chat_history)
 
         try:
             payload = {
                 "inputs": f"<s>[INST] Act as {persona}. {query} [/INST]",
                 "parameters": {"max_new_tokens": 256, "temperature": 0.7, "top_p": 0.9}
             }
-            response = requests.post(
-                self.api_url, headers=self.headers, json=payload, timeout=30
-            )
+            response = requests.post(self.api_url, headers=self.headers, json=payload, timeout=30)
             if response.status_code == 200:
-                return response.json()[0]['generated_text']
+                return response.json()[0].get('generated_text', 'Error: No response from Llama.')
             else:
-                return self.fallback_to_gpt.generate_response(query, persona, chat_history)
-        except Exception:
-            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
+                return self.fallback_to_gpt(query, persona, chat_history)
+        except Exception as e:
+            st.error(f"Error with Llama API: {e}")
+            return self.fallback_to_gpt(query, persona, chat_history)
 
 
 class GemmaHandler(BaseHandler):
     def __init__(self):
+        super().__init__()
         try:
             st.info("Initializing Gemma handler...")
-            # configuration for Gemma API
             self.api_url = "https://api-inference.huggingface.co/models/gemma-model"
             self.headers = {
-                "Authorization": gemma_key,
+                "Authorization": f"Bearer {os.getenv('GEMMA_API_KEY')}",
                 "Content-Type": "application/json"
-            } 
+            }
             self.initialized = True
-        except Exception:
+        except Exception as e:
             self.initialized = False
+            st.error(f"Failed to initialize GemmaHandler: {e}")
 
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         if not self.initialized:
-            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt(query, persona, chat_history)
 
         try:
             payload = {
                 "input": f"Persona: {persona}\nQuery: {query}",
                 "parameters": {"max_tokens": 150}
             }
-            response = requests.post(
-                self.api_url, headers=self.headers, json=payload, timeout=30
-            )
+            response = requests.post(self.api_url, headers=self.headers, json=payload, timeout=30)
             if response.status_code == 200:
-                return response.json().get('text', '')
+                return response.json().get('text', 'Error: No response from Gemma.')
             else:
-                return self.fallback_to_gpt.generate_response(query, persona, chat_history)
-        except Exception:
-            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
+                return self.fallback_to_gpt(query, persona, chat_history)
+        except Exception as e:
+            st.error(f"Error with Gemma API: {e}")
+            return self.fallback_to_gpt(query, persona, chat_history)
+
 
 class PalmHandler(BaseHandler):
     def __init__(self):
+        super().__init__()
         try:
             st.info("Initializing Palm handler...")
-            # configuration for Palm API
             self.api_url = "https://api-inference.huggingface.co/models/palm-model"
             self.headers = {
-                "Authorization": palm_key,
+                "Authorization": f"Bearer {os.getenv('PALM_API_KEY')}",
                 "Content-Type": "application/json"
-            } 
+            }
             self.initialized = True
-        except Exception:
+        except Exception as e:
             self.initialized = False
+            st.error(f"Failed to initialize PalmHandler: {e}")
+
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         if not self.initialized:
-            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt(query, persona, chat_history)
 
         try:
             payload = {
                 "prompt": f"Persona: {persona}\nChat history: {chat_history}\nUser Query: {query}",
                 "options": {"max_output_tokens": 256}
             }
-            response = requests.post(
-                self.api_url, headers=self.headers, json=payload, timeout=30
-            )
+            response = requests.post(self.api_url, headers=self.headers, json=payload, timeout=30)
             if response.status_code == 200:
-                return response.json().get('response', '')
+                return response.json().get('response', 'Error: No response from Palm.')
             else:
-                return self.fallback_to_gpt.generate_response(query, persona, chat_history)
-        except Exception:
-            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
+                return self.fallback_to_gpt(query, persona, chat_history)
+        except Exception as e:
+            st.error(f"Error with Palm API: {e}")
+            return self.fallback_to_gpt(query, persona, chat_history)
