@@ -7,6 +7,12 @@ class ModelHandler(ABC):
     @abstractmethod
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         pass
+class BaseHandler:
+    def __init__(self):
+        self.gpt_handler = GPTHandler()
+
+    def fallback_to_gpt(self, query, persona, chat_history):
+        return self.gpt_handler.generate_response(query, persona, chat_history)
 
 class GPTHandler(ModelHandler):
     def __init__(self):
@@ -56,7 +62,7 @@ class LlamaHandler(ModelHandler):
             self.initialized = False
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         if not self.initialized:
-            return self.GPTHandler.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
 
         try:
             payload = {
@@ -69,9 +75,9 @@ class LlamaHandler(ModelHandler):
             if response.status_code == 200:
                 return response.json()[0]['generated_text']
             else:
-                return self.GPTHandler.generate_response(query, persona, chat_history)
+                return self.fallback_to_gpt.generate_response(query, persona, chat_history)
         except Exception:
-            return self.GPTHandler.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
 
 
 class GemmaHandler(ModelHandler):
@@ -90,7 +96,7 @@ class GemmaHandler(ModelHandler):
 
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         if not self.initialized:
-            return self.GPTHandler.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
 
         try:
             payload = {
@@ -103,9 +109,9 @@ class GemmaHandler(ModelHandler):
             if response.status_code == 200:
                 return response.json().get('text', '')
             else:
-                return self.GPTHandler.generate_response(query, persona, chat_history)
+                return self.fallback_to_gpt.generate_response(query, persona, chat_history)
         except Exception:
-            return self.GPTHandler.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
 
 class PalmHandler(ModelHandler):
     def __init__(self):
@@ -122,7 +128,7 @@ class PalmHandler(ModelHandler):
             self.initialized = False
     def generate_response(self, query: str, persona: str, chat_history: list) -> str:
         if not self.initialized:
-            return self.GPTHandler.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
 
         try:
             payload = {
@@ -135,6 +141,6 @@ class PalmHandler(ModelHandler):
             if response.status_code == 200:
                 return response.json().get('response', '')
             else:
-                return self.GPTHandler.generate_response(query, persona, chat_history)
+                return self.fallback_to_gpt.generate_response(query, persona, chat_history)
         except Exception:
-            return self.GPTHandler.generate_response(query, persona, chat_history)
+            return self.fallback_to_gpt.generate_response(query, persona, chat_history)
