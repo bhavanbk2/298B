@@ -19,10 +19,23 @@ if 'model_handler' not in st.session_state:
 if 'persona' not in st.session_state:
     st.session_state.persona = "Friendly Assistant"
 
-def apply_custom_css(theme):
-    """Apply custom CSS based on theme."""
-    primary_color = "#121212" if theme == "Dark" else "#f5f5f7"
-    text_color = "white" if theme == "Dark" else "black"
+def apply_theme_based_on_browser():
+    """Automatically apply theme based on the browser's theme."""
+    theme_js = """
+    <script>
+    (function() {
+        const isDarkMode = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const themeColor = isDarkMode ? "Dark" : "Light";
+        document.body.setAttribute("data-theme", themeColor);
+    })();
+    </script>
+    """
+    st.markdown(theme_js, unsafe_allow_html=True)
+
+    # Fetch current theme dynamically
+    browser_theme = st.session_state.get('theme', 'Light')
+    primary_color = "#121212" if browser_theme == "Dark" else "#f5f5f7"
+    text_color = "white" if browser_theme == "Dark" else "black"
 
     st.markdown(f"""
     <style>
@@ -74,6 +87,10 @@ def export_chat_history():
         mime="text/plain"
     )
 
+def confirm_clear_chat_history():
+    """Clear chat history with confirmation."""
+    return st.button("Are you sure you want to clear the chat history?")
+
 def load_image(image_path):
     """Load and return an image."""
     if os.path.exists(image_path):
@@ -81,53 +98,54 @@ def load_image(image_path):
     return None
 
 def main():
-    st.set_page_config(page_title="AI Chat Assistant with Images", layout="wide")
+    st.set_page_config(page_title="AI Chat Assistant with Dynamic Theme", layout="wide")
+
+    # Apply browser-based theme
+    apply_theme_based_on_browser()
 
     # Sidebar
     with st.sidebar:
         if st.button("📝 New Chat"):
-            st.session_state.chat_history.clear()
-            st.session_state.model_handler = None
+            if confirm_clear_chat_history():
+                st.session_state.chat_history.clear()
+                st.session_state.model_handler = None
+                st.success("Chat history cleared successfully!")
         
         st.markdown("### 🧠 Choose Assistant Personality")
-        persona = st.selectbox(
+        new_persona = st.selectbox(
             "Select Persona",
             ["Sanjay Gupta", "Robert Kiyosaki"],
             help="Choose the assistant's persona"
         )
-        st.session_state.persona = persona
+        if new_persona != st.session_state.persona:
+            if confirm_clear_chat_history():
+                st.session_state.chat_history.clear()
+                st.session_state.persona = new_persona
+                st.success(f"Persona updated to {new_persona}!")
 
         st.markdown("### 🤖 Choose AI Model")
-        model_choice = st.selectbox(
+        new_model_choice = st.selectbox(
             "Select Model",
             ["GPT", "Llama", "Gemma", "Palm"],
             help="Choose your preferred AI model"
         )
-
-        st.markdown("### 🌗 Theme")
-        theme = st.radio("Choose Theme", ["Dark", "Light"], index=0)
-
-    # Apply theme
-    apply_custom_css(theme)
+        if st.session_state.model_handler is None or type(st.session_state.model_handler).__name__ != f"{new_model_choice}Handler":
+            if confirm_clear_chat_history():
+                st.session_state.chat_history.clear()
+                if new_model_choice == "GPT":
+                    st.session_state.model_handler = GPTHandler()
+                elif new_model_choice == "Llama":
+                    st.session_state.model_handler = LlamaHandler()
+                elif new_model_choice == "Gemma":
+                    st.session_state.model_handler = GemmaHandler()
+                elif new_model_choice == "Palm":
+                    st.session_state.model_handler = PalmHandler()
+                st.success(f"{new_model_choice} model loaded successfully!")
 
     # Main content
     st.title("💬 Persona-Based Conversational Bot")
     st.markdown(f"Ask your question to **{st.session_state.persona}**.")
     
-    # Initialize model handler if not exists or model changed
-    if model_choice == "GPT":
-        if not isinstance(st.session_state.model_handler, GPTHandler):
-            st.session_state.model_handler = GPTHandler()
-    elif model_choice == "Llama":
-        if not isinstance(st.session_state.model_handler, LlamaHandler):
-            st.session_state.model_handler = LlamaHandler()
-    elif model_choice == "Gemma":
-        if not isinstance(st.session_state.model_handler, GemmaHandler):
-            st.session_state.model_handler = GemmaHandler()
-    elif model_choice == "Palm":
-        if not isinstance(st.session_state.model_handler, PalmHandler):
-            st.session_state.model_handler = PalmHandler()
-
     # Chat interface
     user_input = st.text_input("Your message:", key="user_input", placeholder="Type your question here...")
     
