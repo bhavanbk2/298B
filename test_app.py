@@ -36,8 +36,18 @@ def export_chat_history():
         mime="text/plain"
     )
 
+def load_image(image_path):
+    """Load and return an image."""
+    if os.path.exists(image_path):
+        return Image.open(image_path)
+    return None
+
 def main():
     st.set_page_config(page_title="AI Chat Assistant", layout="wide")
+
+    # Load images for user and bot
+    user_image = load_image("images/user_image.png")
+    bot_image = load_image("images/bot_image.png")
 
     # Sidebar
     with st.sidebar:
@@ -100,12 +110,21 @@ def main():
     # Display chat history
     if st.session_state.chat_history:
         for chat in st.session_state.chat_history:
-            # User Message
-            st.markdown(f"**You:** {chat['user']}")
-            # Bot Message
-            st.markdown(f"**{st.session_state.persona}:** {chat['bot']}")
-            st.markdown("---")
+            # User Message with Image
+            col1, col2 = st.columns([1, 9])
+            with col1:
+                st.image(user_image, width=40, caption="You")
+            with col2:
+                st.markdown(f"**{chat['user']}**")
             
+            # Bot Message with Image
+            col1, col2 = st.columns([1, 9])
+            with col1:
+                st.image(bot_image, width=40, caption=st.session_state.persona)
+            with col2:
+                st.markdown(f"**{chat['bot']}**")
+            st.markdown("---")
+        
         # Export Chat History Button
         export_chat_history()
     else:
