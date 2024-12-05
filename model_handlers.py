@@ -14,7 +14,7 @@ class BaseHandler:
     def fallback_to_gpt(self, query, persona, chat_history):
         return self.gpt_handler.generate_response(query, persona, chat_history)
 
-class GPTHandler(ModelHandler):
+class GPTHandler(BaseHandler):
     def __init__(self):
         try:
             api_key = os.getenv("OPENAI_API_KEY")
@@ -47,7 +47,7 @@ class GPTHandler(ModelHandler):
             st.error(f"Error with GPT: {str(e)}")
             return "Sorry, I encountered an error. Please try again."
 
-class LlamaHandler(ModelHandler):
+class LlamaHandler(BaseHandler):
     def __init__(self):
         try:
             st.info("Initializing Llama handler...")
@@ -80,7 +80,7 @@ class LlamaHandler(ModelHandler):
             return self.fallback_to_gpt.generate_response(query, persona, chat_history)
 
 
-class GemmaHandler(ModelHandler):
+class GemmaHandler(BaseHandler):
     def __init__(self):
         try:
             st.info("Initializing Gemma handler...")
@@ -113,7 +113,7 @@ class GemmaHandler(ModelHandler):
         except Exception:
             return self.fallback_to_gpt.generate_response(query, persona, chat_history)
 
-class PalmHandler(ModelHandler):
+class PalmHandler(BaseHandler):
     def __init__(self):
         try:
             st.info("Initializing Palm handler...")
