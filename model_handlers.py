@@ -21,7 +21,7 @@ class BaseHandler(ModelHandler):
         return self.gpt_handler.generate_response(query, persona, chat_history)
 
 
-class GPTHandler(ModelHandler):
+class GPTHandler:
     def __init__(self):
         try:
             api_key = os.getenv("OPENAI_API_KEY")
